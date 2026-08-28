@@ -399,6 +399,57 @@ def _subject_mask_for_crush(image: np.ndarray) -> np.ndarray | None:
     return mask
 
 
+def _snap_paper_to_white(channel: np.ndarray, paper_confidence: float, mask: np.ndarray | None = None):
+    """Final cleanup for a confident document: wipe everything that isn't
+    real content the rest of the way to pure white, so a faint residual
+    shade — or show-through from the far side of the page — lands on 255
+    instead of the 248-254 the tone push leaves it at. Whether a pixel is
+    content is judged locally, not by an absolute level: a pixel far below
+    its own local paper estimate is kept (real ink sits ~200 below; even a
+    faint printed-grey block is 60-150 below), while one within ~12-40 of
+    local paper — clean paper, an anti-alias halo, show-through — is ramped
+    to white.
+
+    Returns (out, keep): `keep` is 1 where the pixel was left alone and 0
+    where it was forced white; a colour caller applies the same ramp to A/B
+    (see _snap_lab) so the wiped area goes neutral too. Scaled by
+    paper_confidence so a non-document image is untouched, and held back
+    over `mask` (a real photographic subject) where one was found.
+
+    A pixel is only wiped when BOTH tests agree it's background: close to
+    its local paper level AND already bright (>~195). The brightness test
+    is what stops a soft subject-mask edge — or any mid-tone near content —
+    from being pulled to white and leaving a pale halo; a genuine faint
+    shade to remove has already been lifted past 195 by the tone push
+    upstream.
+    """
+    local = _background_map(channel).astype(np.float32)
+    ch = channel.astype(np.float32)
+
+    below = local - ch
+    keep_flat = np.clip((below - 12.0) / 28.0, 0.0, 1.0)
+    keep_flat = keep_flat * keep_flat * (3 - 2 * keep_flat)  # smoothstep
+
+    dark = np.clip((215.0 - ch) / 40.0, 0.0, 1.0)
+    dark = dark * dark * (3 - 2 * dark)  # smoothstep: 1 where pixel is dark (<175), 0 where bright (>215)
+
+    keep = np.maximum(keep_flat, dark)
+    keep = 1.0 - paper_confidence * (1.0 - keep)
+    if mask is not None:
+        keep = np.maximum(keep, mask.astype(np.float32) / 255.0)
+    out = ch * keep + 255.0 * (1.0 - keep)
+    return np.clip(out, 0, 255).astype(np.uint8), keep
+
+
+def _snap_lab(l: np.ndarray, a: np.ndarray, b: np.ndarray, paper_confidence: float, mask: np.ndarray | None = None):
+    """_snap_paper_to_white on L, with the same ramp applied to A/B so a
+    wiped-white area is also colour-neutral."""
+    l, keep = _snap_paper_to_white(l, paper_confidence, mask)
+    a = np.clip((a.astype(np.float32) - 128.0) * keep + 128.0, 0, 255).astype(np.uint8)
+    b = np.clip((b.astype(np.float32) - 128.0) * keep + 128.0, 0, 255).astype(np.uint8)
+    return l, a, b
+
+
 def to_docs(image: np.ndarray, allow_background_crush: bool = False) -> np.ndarray:
     """Document-optimized but still color: shadow-flattening AND color-cast
     removal, so the background actually reads as clean white rather than
@@ -445,6 +496,7 @@ def to_docs(image: np.ndarray, allow_background_crush: bool = False) -> np.ndarr
         l = _darken_background(l, mask, _BG_CRUSH_DOCS)
     l = _unsharp(l, amount=1.3, sigma=1.0)
     l, a, b = _white_balance_lab(l, a, b)
+    l, a, b = _snap_lab(l, a, b, confidence, mask)
     return cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
 
 
@@ -478,7 +530,11 @@ def to_clear(image: np.ndarray, allow_background_crush: bool = False) -> np.ndar
     sharpened = _unsharp(pushed, amount=0.6, sigma=1.0)
     if mask is not None:
         sharpened = _darken_background(sharpened, mask, _BG_CRUSH_CLEAR_EXTRA)
-    return sharpened
+    # to_docs already snapped the background; the extra push + unsharp above
+    # can leave 1-3 levels of haze back, so snap once more.
+    l, a, b = cv2.split(cv2.cvtColor(sharpened, cv2.COLOR_BGR2LAB))
+    l, a, b = _snap_lab(l, a, b, confidence, mask)
+    return cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
 
 
 def to_original_bw(image: np.ndarray) -> np.ndarray:
@@ -513,7 +569,8 @@ def to_docs_bw(image: np.ndarray, allow_background_crush: bool = False) -> np.nd
                     0, 255).astype(np.uint8)
     if mask is not None:
         gray = _darken_background(gray, mask, _BG_CRUSH_DOCS)
-    return _unsharp(gray, amount=1.3, sigma=1.0)
+    gray = _unsharp(gray, amount=1.3, sigma=1.0)
+    return _snap_paper_to_white(gray, confidence, mask)[0]
 
 
 def to_clear_bw(image: np.ndarray, allow_background_crush: bool = False) -> np.ndarray:
@@ -530,7 +587,7 @@ def to_clear_bw(image: np.ndarray, allow_background_crush: bool = False) -> np.n
     sharpened = _unsharp(gray, amount=0.6, sigma=1.0)
     if mask is not None:
         sharpened = _darken_background(sharpened, mask, _BG_CRUSH_CLEAR_EXTRA)
-    return sharpened
+    return _snap_paper_to_white(sharpened, confidence, mask)[0]
 
 
 # to_bw kept as an alias — it's the strongest/flagship B&W preset and a few
