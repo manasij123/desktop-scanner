@@ -149,27 +149,37 @@ def _correct_illumination(
     assumes that background SHOULD be white, so on an image whose
     background estimate is itself dark, the divide blows small pixel-to-
     pixel variation up into huge swings — a speckled, wildly overbright
-    mess instead of a legitimate correction. Blending the correction in by
-    how bright the background estimate itself is (already firmly in effect
-    by blend_high, the ~160+ a real, if shaded, paper background
-    measures) means a real document still gets the same full flattening as
-    before, while an image with no paper-like background to begin with is
-    left close to untouched rather than forced toward white.
+    mess instead of a legitimate correction. The correction is therefore
+    scaled per-pixel by how bright the background estimate reads (a genuine
+    paper background, even shaded, measures ~130+), times paper_confidence
+    (see _paper_confidence) to also spare a uniformly bright but non-paper
+    image — a colour-swatch chart's ~13-step grey ramp would otherwise
+    collapse toward white.
 
-    paper_confidence (see _paper_confidence) additionally scales the whole
-    correction down for an image with no real paper background at all —
-    found necessary because a uniformly bright, colorful image can still
-    pass the per-pixel brightness blend above (its "background" estimate
-    reads as bright, just not paper-colored), which this brightness-only
-    check can't catch on its own.
+    When paper_confidence is near 1 (the whole frame really is a page) the
+    per-pixel brightness gate is widened downward — blend_low/high slide
+    from 90/160 toward ~45/115 — so the divide still fully flattens a hard
+    cast shadow (a shadowed page background reads ~120-140, which the
+    unwidened gate only half-corrected, leaving a visible grey shade band —
+    found via a handwriting photo with a sharp diagonal shade line,
+    benchmarked against a real scanner app that erased it). The gate is
+    only widened, not removed: a genuinely dark region (bg < ~80 — an unlit
+    doorway behind the subjects in a non-document photo that still scored
+    high paper_confidence off its bright wall) stays protected from being
+    blown open.
     """
     background = _background_map(channel)
     corrected = cv2.divide(channel, background, scale=255)
 
+    full_page = np.clip((paper_confidence - 0.8) / 0.2, 0.0, 1.0)
+    full_page = full_page * full_page * (3 - 2 * full_page)  # smoothstep
+    lo = blend_low - full_page * 45.0
+    hi = blend_high - full_page * 45.0
+
     bg = background.astype(np.float32)
-    strength = np.clip((bg - blend_low) / max(blend_high - blend_low, 1), 0.0, 1.0)
-    strength = strength * strength * (3 - 2 * strength)  # smoothstep
-    strength = strength * paper_confidence
+    bright_strength = np.clip((bg - lo) / max(hi - lo, 1.0), 0.0, 1.0)
+    bright_strength = bright_strength * bright_strength * (3 - 2 * bright_strength)  # smoothstep
+    strength = bright_strength * paper_confidence
     blended = channel.astype(np.float32) * (1 - strength) + corrected.astype(np.float32) * strength
     return np.clip(blended, 0, 255).astype(np.uint8)
 
@@ -356,6 +366,39 @@ def _unsharp(image: np.ndarray, amount: float = 0.4, sigma: float = 1.2) -> np.n
     return np.clip(sharpened, 0, 255).astype(np.uint8)
 
 
+# If more than this fraction of the ML "subject" region reads as paper
+# (bright + near-neutral), the mask isn't isolating a photographic subject
+# — it's isolating document content, and the subject/background crush must
+# not run. allow_background_crush is only a guess that this isn't a real
+# document (it's set when corner detection fell back to the whole frame); a
+# tightly-cropped photo of a genuine page trips that guess too, and there
+# the segmentation model returns the text itself as the "subject". Crushing
+# then re-introduces a grey shadow halo around the text (via _protect_subject
+# restoring pre-correction tones) — the exact thing Docs/Clear exist to
+# remove. Measured: a real face/photo subject reads ~0.03-0.08 paper-like,
+# a handwriting-on-card "subject" reads ~0.73.
+_SUBJECT_MASK_MAX_PAPER_FRAC = 0.4
+
+
+def _subject_mask_for_crush(image: np.ndarray) -> np.ndarray | None:
+    """detector.get_subject_mask, but returns None when the masked region is
+    itself mostly paper — i.e. the caller's allow_background_crush guess was
+    wrong and this is a real document. See _SUBJECT_MASK_MAX_PAPER_FRAC."""
+    mask = detector.get_subject_mask(image)
+    if mask is None:
+        return None
+    region = mask > 128
+    if not region.any():
+        return None
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB).astype(np.float32)
+    l, a, b = lab[..., 0], lab[..., 1], lab[..., 2]
+    chroma = np.sqrt((a - 128) ** 2 + (b - 128) ** 2)
+    paper_like = (l > 120) & (chroma < 15)
+    if float(paper_like[region].mean()) > _SUBJECT_MASK_MAX_PAPER_FRAC:
+        return None
+    return mask
+
+
 def to_docs(image: np.ndarray, allow_background_crush: bool = False) -> np.ndarray:
     """Document-optimized but still color: shadow-flattening AND color-cast
     removal, so the background actually reads as clean white rather than
@@ -387,7 +430,7 @@ def to_docs(image: np.ndarray, allow_background_crush: bool = False) -> np.ndarr
     # the ML segmentation behind it is the slow part of this pipeline; see
     # _protect_subject for why a photographic subject needs protecting
     # from the illumination correction just applied above.
-    mask = detector.get_subject_mask(image) if allow_background_crush else None
+    mask = _subject_mask_for_crush(image) if allow_background_crush else None
     if mask is not None:
         l = _protect_subject(l, pre_correction_l, mask)
     l = cv2.createCLAHE(clipLimit=_CLAHE_CLIP_LIMIT, tileGridSize=(8, 8)).apply(l)
@@ -428,7 +471,7 @@ def to_clear(image: np.ndarray, allow_background_crush: bool = False) -> np.ndar
     # This second, wider-band push needs the same subject protection as
     # to_docs's own — otherwise a photo protected in to_docs would still
     # get blown out here, just one step later (see _protect_subject).
-    mask = detector.get_subject_mask(image) if allow_background_crush else None
+    mask = _subject_mask_for_crush(image) if allow_background_crush else None
     if mask is not None:
         l = _protect_subject(l, pre_push_l, mask)
     pushed = cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
@@ -461,7 +504,7 @@ def to_docs_bw(image: np.ndarray, allow_background_crush: bool = False) -> np.nd
     gray = cv2.bilateralFilter(gray, d=5, sigmaColor=40, sigmaSpace=40)
     pre_correction_gray = gray
     gray = _correct_illumination(gray, paper_confidence=confidence)
-    mask = detector.get_subject_mask(image) if allow_background_crush else None
+    mask = _subject_mask_for_crush(image) if allow_background_crush else None
     if mask is not None:
         gray = _protect_subject(gray, pre_correction_gray, mask)
     gray = cv2.createCLAHE(clipLimit=_CLAHE_CLIP_LIMIT, tileGridSize=(8, 8)).apply(gray)
@@ -481,7 +524,7 @@ def to_clear_bw(image: np.ndarray, allow_background_crush: bool = False) -> np.n
     pushed = _darken_shadows(_whiten_highlights(docs, blend_start=188, white_point=238), blend_start=105, black_point=52)
     gray = np.clip(docs.astype(np.float32) * (1 - confidence) + pushed.astype(np.float32) * confidence,
                     0, 255).astype(np.uint8)
-    mask = detector.get_subject_mask(image) if allow_background_crush else None
+    mask = _subject_mask_for_crush(image) if allow_background_crush else None
     if mask is not None:
         gray = _protect_subject(gray, docs, mask)
     sharpened = _unsharp(gray, amount=0.6, sigma=1.0)
