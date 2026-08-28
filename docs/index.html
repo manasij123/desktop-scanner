@@ -92,7 +92,7 @@
 
   *, *::before, *::after { box-sizing: border-box; }
 
-  html { -webkit-text-size-adjust: 100%; }
+  html { -webkit-text-size-adjust: 100%; overflow-x: clip; }
 
   body {
     margin: 0;
@@ -103,8 +103,10 @@
     line-height: 1.65;
     font-optical-sizing: auto;
     -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
+
+  main { overflow-x: clip; }
 
   /* faint scanned-surface texture, barely there */
   body::before {
@@ -319,12 +321,12 @@
     to   { opacity: 1; filter: blur(0);   transform: translateY(0); }
   }
 
-  .anim .scanbeam { animation: sweep 1.5s cubic-bezier(0.4, 0, 0.2, 1) 0.15s both; }
-  .anim .hero .eyebrow  { animation: develop 0.6s ease 0.5s both; }
-  .anim .hero h1        { animation: develop 0.7s ease 0.62s both; }
-  .anim .hero .lead     { animation: develop 0.7s ease 0.78s both; }
-  .anim .hero .cta-row  { animation: develop 0.7s ease 0.92s both; }
-  .anim .hero .meta     { animation: develop 0.7s ease 1.04s both; }
+  .anim .scanbeam { animation: sweep 1.15s cubic-bezier(0.4, 0, 0.2, 1) 0.1s both; }
+  .anim .hero .eyebrow  { animation: develop 0.55s ease 0.28s both; }
+  .anim .hero h1        { animation: develop 0.6s ease 0.36s both; }
+  .anim .hero .lead     { animation: develop 0.6s ease 0.46s both; }
+  .anim .hero .cta-row  { animation: develop 0.6s ease 0.56s both; }
+  .anim .hero .meta     { animation: develop 0.6s ease 0.64s both; }
 
   /* ---------- rules ---------- */
   .rule {
@@ -357,6 +359,7 @@
   @media (max-width: 720px) {
     .transform { grid-template-columns: 1fr; justify-items: center; }
     .tarrow { transform: rotate(90deg); }
+    .tcard.photo, .tcard.scan { transform: none; }
   }
 
   .tcard {
@@ -394,12 +397,16 @@
     background: radial-gradient(120% 80% at 85% 15%, rgba(0,0,0,0.28), transparent 60%);
     pointer-events: none;
   }
+  /* the scan output is a clean white page — same in both themes */
   .tcard.scan {
-    background: var(--surface);
-    border: 1px solid var(--edge);
+    background: #FCFCFA;
+    border: 1px solid rgba(20, 20, 40, 0.10);
     box-shadow: var(--shadow);
     transform: rotate(0.6deg);
   }
+  .tcard.scan .doc { color: #1B1B33; }
+  .tcard.scan .doc-head { background: #5B4BE6; }
+  .tcard.scan .ttag { background: #FFFFFF; border-color: rgba(20,20,40,0.14); color: #6E6E88; }
 
   .doc { display: flex; flex-direction: column; gap: 9px; }
   .doc-head { height: 13px; width: 62%; border-radius: 3px; background: currentColor; }
@@ -413,8 +420,6 @@
     transform-origin: left center;
     filter: contrast(0.8) blur(0.4px);
   }
-  .tcard.scan .doc { color: var(--ink); }
-  .tcard.scan .doc-head { background: var(--beam); }
 
   .tarrow {
     display: grid;
@@ -431,13 +436,15 @@
   .grid {
     margin-top: 2.6rem;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(15.5rem, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 1px;
     background: var(--edge);
     border: 1px solid var(--edge);
     border-radius: 16px;
     overflow: hidden;
   }
+  @media (max-width: 880px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
   .feat {
     background: var(--paper);
     padding: 1.8rem 1.7rem 2rem;
@@ -500,7 +507,7 @@
     display: grid;
     grid-template-columns: 3.2rem 1fr;
     gap: 1.2rem;
-    align-items: baseline;
+    align-items: start;
     counter-increment: step;
   }
   .how li::before {
@@ -510,6 +517,7 @@
     font-weight: 500;
     color: var(--beam-ink);
     letter-spacing: 0.02em;
+    line-height: 1.55;
   }
   .how li h3 { font-size: 1.14rem; font-weight: 600; }
   .how li p { margin-top: 0.35rem; color: var(--ink-soft); font-size: 1rem; }
