@@ -7,3 +7,4 @@ pymupdf==1.28.2
 pytesseract==0.3.13
 rembg==2.0.78
 onnxruntime==1.28.0
+requests==2.34.2

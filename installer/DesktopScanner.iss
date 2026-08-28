@@ -8,9 +8,15 @@
 ; privileges dialog.
 
 #define MyAppName "Desktop Scanner"
-#define MyAppVersion "1.0.0"
+; Version comes from clearscanner/_version.py (its first line is
+;   __version__ = "x.y.z"
+; ) so the app and the installer can never disagree.
+#define VerHandle FileOpen(AddBackslash(SourcePath) + "..\clearscanner\_version.py")
+#define VerLine FileRead(VerHandle)
+#expr FileClose(VerHandle)
+#define MyAppVersion Copy(VerLine, Pos('"', VerLine) + 1, RPos('"', VerLine) - Pos('"', VerLine) - 1)
 #define MyAppPublisher "Manasij Mandal"
-#define MyAppURL "https://github.com/manasijmandal1999/desktop-scanner"
+#define MyAppURL "https://github.com/manasij123/desktop-scanner"
 #define MyAppExeName "Desktop Scanner.exe"
 #define MyDistDir "..\dist\Desktop Scanner"
 
@@ -38,6 +44,12 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+; In-app auto-update runs this installer with /VERYSILENT to upgrade in
+; place. CloseApplications lets it replace a running Desktop Scanner.exe
+; (the app also closes itself first); RestartApplications=no because the
+; updater handles relaunching.
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

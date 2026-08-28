@@ -92,22 +92,54 @@ Download button.
 
 ## Shipping a new version later
 
-1. Bump the version in **three** places: `installer/DesktopScanner.iss`
-   (`MyAppVersion`), `docs/index.html` (`DS_RELEASE.version` **and**
-   `DS_RELEASE.asset`), and the visible `v1.0.0` / size text in
-   `docs/index.html` and `README.md`.
-2. Rebuild:
+1. **`clearscanner/_version.py`** — bump the `__version__` string. This is
+   the source of truth: the running app reads it, and the installer script
+   reads its first line, so they can't disagree.
+2. `docs/index.html` — bump `DS_RELEASE.version` **and** `DS_RELEASE.asset`,
+   and the visible `v1.0.x` / size text. (`README.md` too if you keep a
+   version there.)
+3. Rebuild:
 
    ```bash
    venv\Scripts\pyinstaller "Desktop Scanner.spec" --noconfirm
    "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer\DesktopScanner.iss
    ```
+   Output filename tracks the version: `DesktopScanner-Setup-<version>.exe`.
 
-3. Commit the page/version changes, `git push`.
-4. `gh release create vX.Y.Z "installer/Output/DesktopScanner-Setup-X.Y.Z.exe" --title "…" --notes "…"`
+4. Commit, `git push`.
+5. `gh release create vX.Y.Z "installer/Output/DesktopScanner-Setup-X.Y.Z.exe" --title "…" --notes "…"`
 
-The page always points at `/releases/latest/…`, so it picks up the newest
-release automatically once `DS_RELEASE.asset` matches the new filename.
+The website always links to `/releases/latest/…`, and **every installed
+copy auto-updates itself** (below) — so once the release is published, you
+don't have to tell anyone.
+
+---
+
+## Auto-update (how installed copies stay current)
+
+From v1.0.1 on, the app updates itself:
+
+- On launch, a background thread hits
+  `api.github.com/repos/manasij123/desktop-scanner/releases/latest` and
+  compares `tag_name` with the built-in `__version__`.
+- If the release is newer, it downloads that release's
+  `DesktopScanner-Setup-*.exe` quietly, then offers **Install & Restart**
+  or **Install on Exit**. Either way it runs the installer with
+  `/VERYSILENT` — an in-place upgrade (same `AppId`), no admin prompt.
+- All failure paths (offline, GitHub down, no `.exe` asset) are silent
+  no-ops. Running from source (`python main.py`) never checks.
+
+So the **only** manual step to push an update to everyone is publishing the
+GitHub release in step 5 above. Requirements for it to work:
+
+- The release tag must be `vX.Y.Z` (or `X.Y.Z`) and **newer** than the
+  shipped `_version.py`.
+- Exactly one release asset whose name ends `.exe` and contains `setup`
+  (the ISS `OutputBaseFilename` already produces `DesktopScanner-Setup-…`).
+- The repo stays public (the API call is unauthenticated).
+
+v1.0.0 users have no updater — they need to grab v1.0.1 from the site once,
+by hand. After that they're on the automatic track.
 
 ---
 

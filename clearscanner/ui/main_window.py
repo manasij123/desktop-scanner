@@ -12,6 +12,7 @@ from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer
 from PySide6.QtGui import QPainter
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -31,6 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from clearscanner._version import __version__
 from clearscanner.core import detector, filters, ocr, pdf_import
 from clearscanner.output.pdf_writer import images_to_pdf
 from clearscanner.ui import theme
@@ -42,6 +44,7 @@ from clearscanner.ui.page_list import PageList
 from clearscanner.ui.qt_image import to_pixmap
 from clearscanner.ui.scan_worker import DetectWorker, FilterWorker, WarpWorker
 from clearscanner.ui.segmented_control import SegmentedControl
+from clearscanner.ui.update_worker import UpdateCheckWorker, UpdateDownloadWorker
 
 OPEN_FILTER = "Images and PDFs (*.png *.jpg *.jpeg *.bmp *.pdf)"
 SAVE_FILTER = "JPEG (*.jpg);;PNG (*.png)"
@@ -63,7 +66,7 @@ def _card(inner: QWidget, margin: int = 10) -> QFrame:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Desktop Scanner")
+        self.setWindowTitle(f"Desktop Scanner {__version__}")
         self.resize(1000, 720)
 
         self._original_image = None  # BGR ndarray, as loaded
@@ -111,6 +114,16 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         threading.Thread(target=detector.warm_up, daemon=True).start()
+
+        # Auto-update: check GitHub Releases in the background; if a newer
+        # build exists, download it quietly and offer to install (see
+        # _on_update_available). No-op when running from source.
+        self._update_check_worker = None
+        self._update_download_worker = None
+        self._pending_update_installer = None  # path, once downloaded
+        self._pending_update_version = None
+        self._install_update_on_exit = False
+        self._start_update_check()
 
     # ---- UI construction -------------------------------------------------
 
@@ -876,3 +889,64 @@ class MainWindow(QMainWindow):
         finally:
             painter.end()
         self.statusBar().showMessage(f"Sent {len(pages)} page(s) to the printer.", 5000)
+
+    # ---- Auto-update -------------------------------------------------
+
+    def _start_update_check(self):
+        worker = UpdateCheckWorker()
+        worker.updateAvailable.connect(self._on_update_available)
+        self._update_check_worker = worker
+        self._track_worker(worker)
+        worker.start()
+
+    def _on_update_available(self, version: str, url: str, _notes: str):
+        # Pull the new installer down quietly — the user isn't told anything
+        # until it's on disk and ready to apply in one step.
+        self._pending_update_version = version
+        self.statusBar().showMessage(f"Downloading update {version}...", 4000)
+        worker = UpdateDownloadWorker(url)
+        worker.downloaded.connect(self._on_update_downloaded)
+        worker.failed.connect(lambda msg: self.statusBar().showMessage(f"Update download failed: {msg}", 5000))
+        self._update_download_worker = worker
+        self._track_worker(worker)
+        worker.start()
+
+    def _on_update_downloaded(self, installer_path: str):
+        self._pending_update_installer = installer_path
+        version = self._pending_update_version or ""
+        box = QMessageBox(self)
+        box.setWindowTitle("Update ready")
+        box.setIcon(QMessageBox.Information)
+        box.setText(f"Desktop Scanner {version} has been downloaded.")
+        box.setInformativeText(
+            "The update installs in a few seconds. You can apply it now (the app "
+            "closes and reopens) or the next time you close Desktop Scanner."
+        )
+        now_btn = box.addButton("Install && Restart", QMessageBox.AcceptRole)
+        box.addButton("Install on Exit", QMessageBox.RejectRole)
+        box.exec()
+
+        if box.clickedButton() is now_btn:
+            self._apply_pending_update(relaunch=True)
+        else:
+            self._install_update_on_exit = True
+            self.statusBar().showMessage(f"Update {version} will install when you close the app.", 6000)
+
+    def _apply_pending_update(self, relaunch: bool):
+        from clearscanner.core import updater
+
+        if not self._pending_update_installer:
+            return
+        try:
+            updater.apply_update(self._pending_update_installer, relaunch=relaunch)
+        except Exception as exc:
+            QMessageBox.warning(self, "Update failed", f"Could not start the installer:\n{exc}")
+            return
+        self._pending_update_installer = None
+        QApplication.quit()
+
+    def closeEvent(self, event):
+        if self._install_update_on_exit and self._pending_update_installer:
+            self._install_update_on_exit = False
+            self._apply_pending_update(relaunch=False)
+        super().closeEvent(event)

@@ -12,6 +12,11 @@ tmp_ret = collect_all('cv2')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('pymupdf')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+# requests + its runtime deps — the auto-updater (clearscanner.core.updater)
+# needs these, and certifi ships a data file (cacert.pem) that must come along.
+tmp_ret = collect_all('certifi')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+hiddenimports += ['requests', 'charset_normalizer', 'urllib3', 'idna']
 
 
 a = Analysis(
