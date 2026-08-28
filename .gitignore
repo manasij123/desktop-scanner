@@ -1,0 +1,47 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# --- Virtual environments ---
+venv/
+.venv/
+env/
+
+# --- PyInstaller build artifacts ---
+build/
+dist/
+
+# --- Inno Setup output (the installer is uploaded to GitHub Releases, not committed) ---
+installer/Output/
+
+# --- Benchmark fixtures & output ---
+# Kept local only: the case images include real ID documents (Aadhaar,
+# passport) and reference screenshots from other apps — neither belongs in
+# a public repo. The scripts under benchmark/ are committed; the data isn't.
+benchmark/cases/
+benchmark/results/
+
+# --- ML model cache (rembg / u2netp weights, downloaded at runtime) ---
+*.onnx
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+*.log
+androguard.log
+
+# --- Reverse-engineering scratch (not part of the app) ---
+apk_re/
+tes_images_folder/
+
+# --- Large / scratch source media kept out of the repo ---
+*.mp4
+Original.jpeg
+ChatGPT Image *
+hqdefault.avif
+IMG-*.jpg
+DESKTOPSCANNER.png
+DESKTOP ANIMATION.gif
+new.txt

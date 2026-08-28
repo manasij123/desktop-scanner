@@ -1,0 +1,838 @@
+<title>Desktop Scanner</title>
+<meta name="description" content="Turn photos and PDFs of documents into clean, straightened, multi-page scans on Windows — entirely offline.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+
+<!--
+  ┌───────────────────────────────────────────────────────────────────┐
+  │  SET YOUR REPO HERE.  The download buttons are built from this.    │
+  │  Change the two values, then commit. Nothing else needs editing.   │
+  └───────────────────────────────────────────────────────────────────┘
+-->
+<script>
+  window.DS_RELEASE = {
+    // GitHub "owner/repo" that hosts the Releases:
+    repo: "manasij123/desktop-scanner",
+    // Exact asset filename uploaded to the release:
+    asset: "DesktopScanner-Setup-1.0.0.exe",
+    version: "1.0.0"
+  };
+</script>
+
+<style>
+  :root {
+    --paper:      #FBFAF6;
+    --surface:    #FFFFFF;
+    --surface-2:  #F3F1E9;
+    --ink:        #1B1B33;
+    --ink-soft:   #46465F;
+    --muted:      #6E6E88;
+    --edge:       #E6E3D8;
+    --edge-strong:#D6D3C5;
+    --beam:       #5B4BE6;
+    --beam-soft:  #6A5CFF;
+    --beam-ink:   #4A3CD1;
+    --beam-glow:  rgba(106, 92, 255, 0.22);
+    --scan:       #2E6FC7;
+    --scanline:   rgba(27, 27, 51, 0.022);
+    --btn-fg:     #FFFFFF;
+    --shadow:     28px 28px 60px -30px rgba(27, 27, 51, 0.28);
+    --shadow-sm:  12px 14px 34px -18px rgba(27, 27, 51, 0.30);
+  }
+
+  :root:not([data-theme="light"]) {
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #0F0F1E;
+      --surface:    #191930;
+      --surface-2:  #20203A;
+      --ink:        #ECECF5;
+      --ink-soft:   #C0C0D4;
+      --muted:      #8888A2;
+      --edge:       #292945;
+      --edge-strong:#39395C;
+      --beam:       #8C82FF;
+      --beam-soft:  #A79EFF;
+      --beam-ink:   #ADA4FF;
+      --beam-glow:  rgba(140, 130, 255, 0.28);
+      --scan:       #6BA6E8;
+      --scanline:   rgba(255, 255, 255, 0.022);
+      --btn-fg:     #12122A;
+      --shadow:     28px 28px 70px -30px rgba(0, 0, 0, 0.6);
+      --shadow-sm:  12px 14px 38px -18px rgba(0, 0, 0, 0.55);
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:      #0F0F1E;
+    --surface:    #191930;
+    --surface-2:  #20203A;
+    --ink:        #ECECF5;
+    --ink-soft:   #C0C0D4;
+    --muted:      #8888A2;
+    --edge:       #292945;
+    --edge-strong:#39395C;
+    --beam:       #8C82FF;
+    --beam-soft:  #A79EFF;
+    --beam-ink:   #ADA4FF;
+    --beam-glow:  rgba(140, 130, 255, 0.28);
+    --scan:       #6BA6E8;
+    --scanline:   rgba(255, 255, 255, 0.022);
+    --btn-fg:     #12122A;
+    --shadow:     28px 28px 70px -30px rgba(0, 0, 0, 0.6);
+    --shadow-sm:  12px 14px 38px -18px rgba(0, 0, 0, 0.55);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Newsreader", Georgia, "Times New Roman", serif;
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* faint scanned-surface texture, barely there */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent 0 2px,
+      var(--scanline) 2px 3px
+    );
+  }
+
+  h1, h2, h3 {
+    font-family: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    font-weight: 700;
+    line-height: 1.06;
+    letter-spacing: -0.021em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  p { margin: 0; }
+  a { color: inherit; }
+
+  .mono {
+    font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.8rem;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .eyebrow {
+    font-family: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    font-weight: 600;
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--beam-ink);
+  }
+
+  .wrap { width: min(100% - 2.5rem, 1080px); margin-inline: auto; }
+  .measure { max-width: 40rem; }
+
+  /* ---------- header ---------- */
+  header.site {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    width: min(100% - 2.5rem, 1080px);
+    margin: 0 auto;
+    padding: 0.85rem 0;
+    background: color-mix(in srgb, var(--paper) 86%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid transparent;
+  }
+  header.site.stuck { border-bottom-color: var(--edge); }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-size: 1.02rem;
+    text-decoration: none;
+    color: var(--ink);
+  }
+  .chip {
+    display: grid;
+    place-items: center;
+    background: #FFFFFF;
+    border: 1px solid var(--edge-strong);
+    border-radius: 9px;
+    padding: 5px;
+  }
+  .chip svg { display: block; }
+  .brand .chip { width: 34px; height: 34px; }
+  .brand .chip svg { width: 100%; height: 100%; }
+
+  header.site nav {
+    display: flex;
+    align-items: center;
+    gap: 1.1rem;
+    font-family: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  header.site nav a { text-decoration: none; color: var(--ink-soft); }
+  header.site nav a:hover { color: var(--ink); }
+  header.site nav .ver { color: var(--muted); font-family: "JetBrains Mono", monospace; font-size: 0.78rem; }
+  .nav-src { display: none; }
+  @media (min-width: 560px) { .nav-src { display: inline; } }
+
+  /* ---------- buttons ---------- */
+  .btn {
+    --_bg: var(--beam);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    font-family: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    font-weight: 600;
+    font-size: 0.95rem;
+    letter-spacing: -0.005em;
+    text-decoration: none;
+    color: var(--btn-fg);
+    background: var(--_bg);
+    border: 1px solid transparent;
+    border-radius: 11px;
+    padding: 0.7rem 1.15rem;
+    cursor: pointer;
+    transition: transform 0.16s ease, box-shadow 0.22s ease, background 0.16s ease;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.14) inset, 0 10px 26px -14px var(--beam-glow);
+  }
+  .btn:hover {
+    transform: translateY(-2px);
+    background: var(--beam-soft);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.18) inset, 0 18px 40px -14px var(--beam-glow), 0 0 0 4px var(--beam-glow);
+  }
+  .btn:active { transform: translateY(0); }
+  .btn:focus-visible { outline: 3px solid var(--beam-ink); outline-offset: 3px; }
+
+  .btn-lg { font-size: 1.02rem; padding: 0.95rem 1.6rem; border-radius: 13px; }
+  .btn-sm { padding: 0.5rem 0.85rem; font-size: 0.82rem; border-radius: 9px; }
+
+  .btn-ghost {
+    color: var(--ink);
+    background: transparent;
+    border-color: var(--edge-strong);
+    box-shadow: none;
+  }
+  .btn-ghost:hover {
+    background: var(--surface-2);
+    border-color: var(--muted);
+    box-shadow: none;
+  }
+
+  .btn-sub {
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 400;
+    font-size: 0.72rem;
+    opacity: 0.8;
+    padding-left: 0.55rem;
+    margin-left: 0.15rem;
+    border-left: 1px solid color-mix(in srgb, var(--btn-fg) 35%, transparent);
+  }
+
+  /* ---------- hero ---------- */
+  .hero {
+    position: relative;
+    width: min(100% - 2.5rem, 1080px);
+    margin: 0 auto;
+    padding: clamp(3.5rem, 9vw, 7rem) 0 clamp(3rem, 7vw, 5.5rem);
+    overflow: hidden;
+  }
+  .hero > *:not(.scanbeam) { position: relative; z-index: 1; }
+
+  .hero h1 {
+    font-size: clamp(2.5rem, 6.2vw, 4.7rem);
+    font-weight: 800;
+    margin: 0.7rem 0 0;
+    max-width: 15ch;
+  }
+  .hero .lead {
+    margin-top: 1.4rem;
+    font-size: clamp(1.08rem, 1.7vw, 1.32rem);
+    color: var(--ink-soft);
+    max-width: 40rem;
+  }
+  .hero .lead b { font-weight: 600; color: var(--ink); }
+
+  .cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85rem;
+    margin-top: 2.1rem;
+  }
+  .hero .meta {
+    margin-top: 1.4rem;
+    color: var(--muted);
+  }
+
+  /* scanning-head sweep on load */
+  .scanbeam {
+    position: absolute;
+    left: -10%;
+    right: -10%;
+    top: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--beam-soft) 20%, var(--beam-soft) 80%, transparent);
+    box-shadow: 0 0 26px 7px var(--beam-glow), 0 0 90px 20px var(--beam-glow);
+    opacity: 0;
+    z-index: 3;
+  }
+
+  @keyframes sweep {
+    0%   { top: -4%;  opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { top: 104%; opacity: 0; }
+  }
+  @keyframes develop {
+    from { opacity: 0; filter: blur(7px); transform: translateY(10px); }
+    to   { opacity: 1; filter: blur(0);   transform: translateY(0); }
+  }
+
+  .anim .scanbeam { animation: sweep 1.5s cubic-bezier(0.4, 0, 0.2, 1) 0.15s both; }
+  .anim .hero .eyebrow  { animation: develop 0.6s ease 0.5s both; }
+  .anim .hero h1        { animation: develop 0.7s ease 0.62s both; }
+  .anim .hero .lead     { animation: develop 0.7s ease 0.78s both; }
+  .anim .hero .cta-row  { animation: develop 0.7s ease 0.92s both; }
+  .anim .hero .meta     { animation: develop 0.7s ease 1.04s both; }
+
+  /* ---------- rules ---------- */
+  .rule {
+    width: min(100% - 2.5rem, 1080px);
+    margin: 0 auto;
+    height: 0;
+    border-top: 1px solid var(--edge-strong);
+    border-bottom: 1px solid var(--edge);
+    padding-top: 3px;
+  }
+
+  section.band, section.slab {
+    width: min(100% - 2.5rem, 1080px);
+    margin: 0 auto;
+    padding: clamp(3.5rem, 9vw, 7rem) 0;
+  }
+  section.slab h2 {
+    font-size: clamp(1.7rem, 3.6vw, 2.6rem);
+    max-width: 20ch;
+  }
+  section.slab > .measure { margin-top: 1.1rem; color: var(--ink-soft); }
+
+  /* ---------- transform band ---------- */
+  .transform {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: clamp(1rem, 4vw, 3rem);
+  }
+  @media (max-width: 720px) {
+    .transform { grid-template-columns: 1fr; justify-items: center; }
+    .tarrow { transform: rotate(90deg); }
+  }
+
+  .tcard {
+    width: 100%;
+    max-width: 340px;
+    border-radius: 14px;
+    padding: 26px 24px 30px;
+    position: relative;
+  }
+  .tcard .ttag {
+    position: absolute;
+    left: 16px;
+    bottom: -12px;
+    font-family: "Archivo", sans-serif;
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding: 4px 9px;
+    border-radius: 6px;
+    background: var(--surface);
+    border: 1px solid var(--edge-strong);
+    color: var(--muted);
+  }
+  .tcard.photo {
+    background: linear-gradient(150deg, #d7cab0 0%, #c3b393 55%, #cdbfa1 100%);
+    transform: rotate(-3.5deg);
+    box-shadow: var(--shadow);
+  }
+  .tcard.photo::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 14px;
+    background: radial-gradient(120% 80% at 85% 15%, rgba(0,0,0,0.28), transparent 60%);
+    pointer-events: none;
+  }
+  .tcard.scan {
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    box-shadow: var(--shadow);
+    transform: rotate(0.6deg);
+  }
+
+  .doc { display: flex; flex-direction: column; gap: 9px; }
+  .doc-head { height: 13px; width: 62%; border-radius: 3px; background: currentColor; }
+  .doc-line { height: 7px; border-radius: 3px; background: currentColor; }
+  .doc-img  { margin-top: 6px; height: 46px; width: 46%; border-radius: 4px; background: currentColor; opacity: 0.5; }
+
+  .tcard.photo .doc {
+    color: #4a4032;
+    opacity: 0.72;
+    transform: perspective(680px) rotateY(11deg) rotateX(4deg);
+    transform-origin: left center;
+    filter: contrast(0.8) blur(0.4px);
+  }
+  .tcard.scan .doc { color: var(--ink); }
+  .tcard.scan .doc-head { background: var(--beam); }
+
+  .tarrow {
+    display: grid;
+    place-items: center;
+    width: 46px;
+    height: 46px;
+    flex-shrink: 0;
+    color: var(--beam-ink);
+  }
+  .tarrow svg { width: 100%; height: 100%; }
+
+  /* ---------- features ---------- */
+  .features h2 { font-size: clamp(1.7rem, 3.6vw, 2.6rem); }
+  .grid {
+    margin-top: 2.6rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15.5rem, 1fr));
+    gap: 1px;
+    background: var(--edge);
+    border: 1px solid var(--edge);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .feat {
+    background: var(--paper);
+    padding: 1.8rem 1.7rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+  }
+  .feat .ico {
+    width: 30px; height: 30px;
+    color: var(--beam-ink);
+  }
+  .feat .ico svg { width: 100%; height: 100%; display: block; }
+  .feat h3 {
+    font-size: 1.12rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .feat p { color: var(--ink-soft); font-size: 1rem; line-height: 1.58; }
+
+  /* ---------- privacy slab ---------- */
+  .privacy {
+    background: var(--surface);
+    border-top: 1px solid var(--edge);
+    border-bottom: 1px solid var(--edge);
+  }
+  .privacy .inner {
+    width: min(100% - 2.5rem, 1080px);
+    margin: 0 auto;
+    padding: clamp(3.5rem, 8vw, 6rem) 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: clamp(1.5rem, 5vw, 4rem);
+    align-items: start;
+  }
+  @media (max-width: 640px) { .privacy .inner { grid-template-columns: 1fr; } }
+  .privacy .mark {
+    width: 68px; height: 68px;
+    color: var(--beam-ink);
+    flex-shrink: 0;
+  }
+  .privacy h2 { font-size: clamp(1.55rem, 3.3vw, 2.3rem); max-width: 18ch; }
+  .privacy p { margin-top: 1rem; color: var(--ink-soft); max-width: 42rem; }
+
+  /* ---------- how ---------- */
+  .how ol {
+    margin: 2.6rem 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 1px;
+    background: var(--edge);
+    border: 1px solid var(--edge);
+    border-radius: 16px;
+    overflow: hidden;
+    counter-reset: step;
+  }
+  .how li {
+    background: var(--paper);
+    padding: 1.7rem 1.8rem;
+    display: grid;
+    grid-template-columns: 3.2rem 1fr;
+    gap: 1.2rem;
+    align-items: baseline;
+    counter-increment: step;
+  }
+  .how li::before {
+    content: counter(step, decimal-leading-zero);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--beam-ink);
+    letter-spacing: 0.02em;
+  }
+  .how li h3 { font-size: 1.14rem; font-weight: 600; }
+  .how li p { margin-top: 0.35rem; color: var(--ink-soft); font-size: 1rem; }
+
+  /* ---------- download ---------- */
+  .download { text-align: left; }
+  .download h2 { font-size: clamp(1.7rem, 3.6vw, 2.6rem); }
+  .dlcard {
+    margin-top: 2.2rem;
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    padding: clamp(1.6rem, 4vw, 2.6rem);
+    display: grid;
+    gap: 1.6rem;
+    max-width: 40rem;
+  }
+  .spec {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+  .spec th, .spec td {
+    text-align: left;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--edge);
+    vertical-align: top;
+  }
+  .spec tr:last-child th, .spec tr:last-child td { border-bottom: 0; }
+  .spec th {
+    font-weight: 400;
+    color: var(--muted);
+    width: 8.5rem;
+    font-family: "Archivo", sans-serif;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 0.68rem;
+    padding-top: 0.75rem;
+  }
+  .spec td { color: var(--ink); }
+  .note {
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+    line-height: 1.55;
+    border-left: 2px solid var(--beam);
+    padding-left: 0.95rem;
+  }
+  .note em { font-style: italic; color: var(--ink); }
+
+  /* ---------- footer ---------- */
+  footer {
+    width: min(100% - 2.5rem, 1080px);
+    margin: 0 auto;
+    padding: 2.6rem 0 3.5rem;
+    border-top: 1px solid var(--edge);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.9rem 1.3rem;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+  footer .chip { width: 30px; height: 30px; }
+  footer a { color: var(--ink-soft); }
+  footer .grow { flex: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .anim .scanbeam { animation: none; opacity: 0; }
+    .anim .hero > * { animation: none !important; }
+    .btn { transition: none; }
+    .btn:hover { transform: none; }
+    .reveal { opacity: 1 !important; transform: none !important; }
+  }
+
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+</style>
+<noscript><style>
+  .reveal { opacity: 1 !important; transform: none !important; }
+</style></noscript>
+
+<header class="site">
+  <a class="brand" href="#top">
+    <span class="chip" aria-hidden="true">
+      <svg viewBox="0 0 1254 1254" xmlns="http://www.w3.org/2000/svg" fill="none">
+        <path d="M498.637 274.82H780.676L1039.33 859.357H219.521L498.637 274.82Z" fill="#7779FF" fill-opacity="0.55"/>
+        <path d="M352.688 1114.13H902.153C918.826 1114.13 932.341 1127.65 932.341 1144.32C932.341 1160.99 918.826 1174.51 902.153 1174.51H352.688C336.016 1174.51 322.5 1160.99 322.5 1144.32C322.5 1127.65 336.016 1114.13 352.688 1114.13ZM722.035 1032.3C731.392 1063.97 738.045 1084.13 743.591 1096.5C746.373 1102.7 748.892 1106.98 751.357 1109.77C752.731 1111.32 754.095 1112.42 755.485 1113.13H497.524C505.038 1107.85 510.61 1100.68 515.472 1088.8C520.586 1076.31 524.926 1058.58 529.924 1032.3H722.035Z" fill="#2F2F5C" stroke="#2F2F5C"/>
+        <path d="M915.86 230.979H1078.79C1127.21 230.979 1166.47 270.235 1166.47 318.66V879.816C1166.47 928.24 1127.21 967.496 1078.79 967.496H175.681C127.256 967.496 88 928.24 88 879.816V318.66C88 270.235 127.256 230.979 175.681 230.979H383.664" stroke="#2F2F5C" stroke-width="57"/>
+        <path d="M882.97 128.686H421.186V222.212C421.186 239.967 435.58 254.361 453.336 254.361H847.898C867.268 254.361 882.97 238.659 882.97 219.289V128.686Z" fill="#2F2F5C"/>
+        <path d="M421.186 128.686H882.97L844.366 84.9338C841.037 81.1611 836.248 79 831.216 79H472.939C468.83 79 464.91 80.7306 462.141 83.7676L421.186 128.686Z" fill="#EDEBFF"/>
+        <path d="M482.562 187.139C482.562 180.682 487.797 175.448 494.253 175.448H555.63C562.086 175.448 567.32 180.682 567.32 187.139C567.32 193.596 562.086 198.83 555.63 198.83H494.253C487.797 198.83 482.562 193.596 482.562 187.139Z" fill="#EDEBFF"/>
+        <path d="M844.975 187.139C844.975 195.21 838.433 201.752 830.362 201.752C822.291 201.752 815.749 195.21 815.749 187.139C815.749 179.068 822.291 172.526 830.362 172.526C838.433 172.526 844.975 179.068 844.975 187.139Z" fill="#EDEBFF"/>
+        <path d="M963.919 829.495H932.615V523.801C930.93 519.615 929.259 516.866 927.013 514.619C924.606 512.21 921.29 510.123 915.915 507.635L913.647 506.585L913.669 506.538H826.909L826.158 506.518L826.129 506.517L826.098 506.516C817.344 506.073 810.329 499.056 809.885 490.302L809.883 490.272L809.882 490.242L809.863 489.491L809.862 489.458V385.594L809.874 384.991L809.876 384.944C810.417 370.658 827.276 363.408 838.006 372.555L838.513 373.002L838.548 373.035L838.985 373.452L839.002 373.468L839.018 373.484L943.79 477.269C945.646 479.108 946.971 481.196 947.804 483.395L947.905 483.479C958.361 492.34 961.714 506.544 963.846 517.903L963.873 518.035L963.919 518.272V829.495Z" fill="#2F2F5C" stroke="#2F2F5C" stroke-width="5"/>
+        <line x1="406.5" y1="621.831" x2="810.825" y2="621.831" stroke="#3E7BD6" stroke-width="37" stroke-linecap="round"/>
+        <line x1="406.5" y1="718.28" x2="810.825" y2="718.28" stroke="#3E7BD6" stroke-width="37" stroke-linecap="round"/>
+        <line x1="406.5" y1="808.883" x2="810.825" y2="808.883" stroke="#3E7BD6" stroke-width="37" stroke-linecap="round"/>
+      </svg>
+    </span>
+    <span>Desktop&nbsp;Scanner</span>
+  </a>
+  <nav>
+    <span class="ver">v1.0.0</span>
+    <a class="nav-src" data-repo href="https://github.com/manasij123/desktop-scanner">Source</a>
+    <a class="btn btn-sm" data-download href="#get">Download</a>
+  </nav>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="scanbeam" aria-hidden="true"></div>
+    <p class="eyebrow">Windows &nbsp;·&nbsp; Free &nbsp;·&nbsp; Offline</p>
+    <h1>Turn a photo of a page into a real scan.</h1>
+    <p class="lead">Desktop Scanner finds the document in your photo, <b>straightens the perspective</b>, cleans up the lighting, and hands you a crisp multi-page PDF &mdash; with no scanner, no account, and nothing uploaded anywhere.</p>
+    <div class="cta-row">
+      <a class="btn btn-lg" data-download href="https://github.com/manasij123/desktop-scanner/releases/latest">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg>
+        Download for Windows
+        <span class="btn-sub">Setup · 167 MB</span>
+      </a>
+      <a class="btn btn-ghost btn-lg" href="#get">Details &amp; requirements</a>
+    </div>
+    <p class="meta mono">DesktopScanner-Setup-1.0.0.exe &nbsp;·&nbsp; Windows 10 / 11 (64-bit) &nbsp;·&nbsp; installs per-user, no admin</p>
+  </section>
+
+  <div class="rule"></div>
+
+  <section class="band transform reveal" aria-label="Before and after">
+    <div class="tcard photo">
+      <div class="doc" aria-hidden="true">
+        <div class="doc-head"></div>
+        <div class="doc-line" style="width:96%"></div>
+        <div class="doc-line" style="width:88%"></div>
+        <div class="doc-line" style="width:92%"></div>
+        <div class="doc-line" style="width:70%"></div>
+        <div class="doc-img"></div>
+        <div class="doc-line" style="width:84%"></div>
+        <div class="doc-line" style="width:90%"></div>
+      </div>
+      <span class="ttag">Your photo</span>
+    </div>
+
+    <div class="tarrow" aria-hidden="true">
+      <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 24h30"/><path d="M26 12l14 12-14 12"/>
+      </svg>
+    </div>
+
+    <div class="tcard scan">
+      <div class="doc" aria-hidden="true">
+        <div class="doc-head"></div>
+        <div class="doc-line" style="width:96%"></div>
+        <div class="doc-line" style="width:88%"></div>
+        <div class="doc-line" style="width:92%"></div>
+        <div class="doc-line" style="width:70%"></div>
+        <div class="doc-img"></div>
+        <div class="doc-line" style="width:84%"></div>
+        <div class="doc-line" style="width:90%"></div>
+      </div>
+      <span class="ttag">Desktop Scanner &middot; PDF</span>
+    </div>
+  </section>
+
+  <div class="rule"></div>
+
+  <section class="band features slab">
+    <h2>What it does</h2>
+    <p class="measure">Every scanner-app feature you actually use, on the desktop &mdash; and tuned against real reference scans, not guessed at.</p>
+    <div class="grid">
+      <div class="feat reveal">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M20 8V5a1 1 0 0 0-1-1h-3M4 16v3a1 1 0 0 0 1 1h3M20 16v3a1 1 0 0 1-1 1h-3"/><rect x="8.5" y="8.5" width="7" height="7" rx="1"/></svg></span>
+        <h3>Finds the page for you</h3>
+        <p>A trained segmentation model plus classic edge detection locate the document even on a cluttered desk or an open notebook &mdash; and turn down a photo that has no document in it.</p>
+      </div>
+      <div class="feat reveal">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5 17 7v10l-10 2.5V4.5Z"/><path d="M7 4.5 4 6v12l3 1.5M17 7l3-1.5v12L17 17"/></svg></span>
+        <h3>Fixes the angle</h3>
+        <p>Four draggable corners and a perspective warp flatten a page shot from any angle into a straight-on rectangle. Nudge a corner if the automatic guess is slightly off.</p>
+      </div>
+      <div class="feat reveal">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="12" r="6"/><path d="M15 6a6 6 0 0 1 0 12" fill="currentColor" stroke="none"/></svg></span>
+        <h3>Four scan looks</h3>
+        <p>Original, Photo, Docs and Clear &mdash; each in colour or black &amp; white. Docs and Clear flatten shadows, neutralise the paper tint, and drive text to crisp black.</p>
+      </div>
+      <div class="feat reveal">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="1.5"/><path d="M8 20h11a1 1 0 0 0 1-1V8"/><path d="M9.5 9.5h3M11 8v3"/></svg></span>
+        <h3>Photos and PDFs, in bulk</h3>
+        <p>Drop in a stack of images or an existing PDF at once. Set the crop and the look one time; every page in the batch follows.</p>
+      </div>
+      <div class="feat reveal">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7V4h14v3M5 17v3h14v-3"/><path d="m8.5 15 2-6 2 6M9 13h3"/><path d="M15 9v6"/></svg></span>
+        <h3>Reads the text</h3>
+        <p>Built-in OCR extracts selectable text in English and Bengali &mdash; copy it straight out, or save it as a <span class="mono">.txt</span> file.</p>
+      </div>
+      <div class="feat reveal">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9" width="16" height="8" rx="1.5"/><path d="M7 9V4h10v5M7 17v3h10v-3"/><circle cx="16.5" cy="12.5" r="0.9" fill="currentColor"/></svg></span>
+        <h3>One clean PDF out</h3>
+        <p>Reorder, rotate or drop pages, then export a single A4 PDF &mdash; or send the whole document straight to a printer.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="privacy">
+    <div class="inner">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+      </span>
+      <div>
+        <h2>Your documents never leave your computer.</h2>
+        <p>Detection, perspective correction, filtering and OCR all run locally on your machine. There is no sign-in, no cloud step, and no telemetry. Pull the network cable and Desktop Scanner works exactly the same &mdash; the model weights and language data ship inside the app.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band how slab">
+    <h2>Three steps</h2>
+    <p class="measure">From a folder of phone photos to a finished PDF.</p>
+    <ol>
+      <li>
+        <div>
+          <h3>Add your pages</h3>
+          <p>Point Desktop Scanner at phone photos of a document, or at an existing PDF whose pages need cleaning up.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Set the crop and the look</h3>
+          <p>Confirm the detected corners, choose <em>Clear</em> for a printed-page finish or <em>Photo</em> for a lighter touch, and adjust brightness or contrast if you want to.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Export</h3>
+          <p>Save one multi-page PDF to your desktop, pull the text out with OCR, or print the document &mdash; all offline.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <div class="rule"></div>
+
+  <section class="band download slab" id="get">
+    <h2>Download</h2>
+    <p class="measure">One installer. It sets Desktop Scanner up for your user account &mdash; no administrator rights needed &mdash; and adds a Start&nbsp;Menu shortcut.</p>
+    <div class="dlcard">
+      <div>
+        <a class="btn btn-lg" data-download href="https://github.com/manasij123/desktop-scanner/releases/latest">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg>
+          Download for Windows
+        </a>
+      </div>
+      <table class="spec mono">
+        <tbody>
+          <tr><th>Version</th><td>1.0.0</td></tr>
+          <tr><th>File</th><td>DesktopScanner-Setup-1.0.0.exe</td></tr>
+          <tr><th>Size</th><td>167 MB download &nbsp;·&nbsp; ~640 MB installed</td></tr>
+          <tr><th>Requires</th><td>Windows 10 or 11, 64-bit</td></tr>
+          <tr><th>Install</th><td>Per-user &mdash; no administrator prompt</td></tr>
+          <tr><th>Price</th><td>Free &nbsp;·&nbsp; MIT-licensed, source on GitHub</td></tr>
+        </tbody>
+      </table>
+      <p class="note">On first run Windows may show <em>&ldquo;Windows protected your PC&rdquo;</em> because the installer isn&rsquo;t code-signed. Click <em>More info &rarr; Run anyway</em>. If you&rsquo;d rather not, the full source is on GitHub and you can build it yourself.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span class="chip" aria-hidden="true">
+    <svg viewBox="0 0 1254 1254" xmlns="http://www.w3.org/2000/svg" fill="none">
+      <path d="M498.637 274.82H780.676L1039.33 859.357H219.521L498.637 274.82Z" fill="#7779FF" fill-opacity="0.55"/>
+      <path d="M352.688 1114.13H902.153C918.826 1114.13 932.341 1127.65 932.341 1144.32C932.341 1160.99 918.826 1174.51 902.153 1174.51H352.688C336.016 1174.51 322.5 1160.99 322.5 1144.32C322.5 1127.65 336.016 1114.13 352.688 1114.13ZM722.035 1032.3C731.392 1063.97 738.045 1084.13 743.591 1096.5C746.373 1102.7 748.892 1106.98 751.357 1109.77C752.731 1111.32 754.095 1112.42 755.485 1113.13H497.524C505.038 1107.85 510.61 1100.68 515.472 1088.8C520.586 1076.31 524.926 1058.58 529.924 1032.3H722.035Z" fill="#2F2F5C" stroke="#2F2F5C"/>
+      <path d="M915.86 230.979H1078.79C1127.21 230.979 1166.47 270.235 1166.47 318.66V879.816C1166.47 928.24 1127.21 967.496 1078.79 967.496H175.681C127.256 967.496 88 928.24 88 879.816V318.66C88 270.235 127.256 230.979 175.681 230.979H383.664" stroke="#2F2F5C" stroke-width="57"/>
+      <path d="M882.97 128.686H421.186V222.212C421.186 239.967 435.58 254.361 453.336 254.361H847.898C867.268 254.361 882.97 238.659 882.97 219.289V128.686Z" fill="#2F2F5C"/>
+      <line x1="406.5" y1="621.831" x2="810.825" y2="621.831" stroke="#3E7BD6" stroke-width="37" stroke-linecap="round"/>
+      <line x1="406.5" y1="718.28" x2="810.825" y2="718.28" stroke="#3E7BD6" stroke-width="37" stroke-linecap="round"/>
+      <line x1="406.5" y1="808.883" x2="810.825" y2="808.883" stroke="#3E7BD6" stroke-width="37" stroke-linecap="round"/>
+    </svg>
+  </span>
+  <p>Desktop&nbsp;Scanner &mdash; built by Manasij&nbsp;Mandal. <a data-repo href="https://github.com/manasij123/desktop-scanner">Source &amp; issues on GitHub</a>.</p>
+  <span class="grow"></span>
+  <span class="mono">v1.0.0 &nbsp;·&nbsp; 2026</span>
+</footer>
+
+<script>
+  (function () {
+    var cfg = window.DS_RELEASE || {};
+    var repoUrl = "https://github.com/" + (cfg.repo || "");
+    var latestUrl = repoUrl + "/releases/latest";
+    var directUrl = cfg.asset
+      ? repoUrl + "/releases/latest/download/" + cfg.asset
+      : latestUrl;
+
+    document.querySelectorAll("[data-repo]").forEach(function (a) { a.href = repoUrl; });
+    document.querySelectorAll("[data-download]").forEach(function (a) {
+      // In-page anchor stays an anchor; real download links get the asset URL.
+      if (a.getAttribute("href") && a.getAttribute("href").charAt(0) === "#") return;
+      a.href = directUrl;
+      a.setAttribute("rel", "noopener");
+    });
+    var getBtn = document.querySelector("#get [data-download]");
+    if (getBtn) getBtn.href = directUrl;
+
+    // Header hairline once scrolled.
+    var header = document.querySelector("header.site");
+    var onScroll = function () { header.classList.toggle("stuck", window.scrollY > 8); };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+
+    // Load sweep.
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.documentElement.classList.add("anim");
+
+    // Scroll reveals.
+    var reveals = document.querySelectorAll(".reveal");
+    if (reduce || !("IntersectionObserver" in window)) {
+      reveals.forEach(function (el) { el.classList.add("in"); });
+    } else {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+        });
+      }, { rootMargin: "0px 0px -10% 0px" });
+      reveals.forEach(function (el) { io.observe(el); });
+    }
+  })();
+</script>
