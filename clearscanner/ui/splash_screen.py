@@ -10,12 +10,13 @@ from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt, QTimer, 
 from PySide6.QtGui import QMovie
 from PySide6.QtWidgets import QApplication, QGraphicsOpacityEffect, QLabel, QWidget
 
-from clearscanner.ui import theme
-
 SPLASH_WIDTH = 640
 SPLASH_HEIGHT = 360
 MIN_DURATION = 1600
 FADE_DURATION = 350
+# The intro GIF is dark-branded; keep the splash frame dark to match it,
+# even though the app itself is a light theme.
+SPLASH_BG = "#1A1730"
 
 
 class SplashScreen(QWidget):
@@ -24,7 +25,7 @@ class SplashScreen(QWidget):
     def __init__(self, gif_path: str, parent=None):
         super().__init__(parent, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.SplashScreen)
         self.setFixedSize(SPLASH_WIDTH, SPLASH_HEIGHT)
-        self.setStyleSheet(f"background-color: {theme.BG};")
+        self.setStyleSheet(f"background-color: {SPLASH_BG};")
 
         self._label = QLabel(self)
         self._label.setAlignment(Qt.AlignCenter)

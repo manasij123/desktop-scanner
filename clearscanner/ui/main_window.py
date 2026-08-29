@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
 from clearscanner._version import __version__
 from clearscanner.core import detector, filters, ocr, pdf_import
 from clearscanner.output.pdf_writer import images_to_pdf
-from clearscanner.ui import theme
+from clearscanner.ui import icons, theme
 from clearscanner.ui.batch_dialog import BatchSettingsDialog
 from clearscanner.ui.crop_editor import CropEditor
 from clearscanner.ui.ocr_dialog import OcrResultDialog
@@ -44,6 +44,7 @@ from clearscanner.ui.page_list import PageList
 from clearscanner.ui.qt_image import to_pixmap
 from clearscanner.ui.scan_worker import DetectWorker, FilterWorker, WarpWorker
 from clearscanner.ui.segmented_control import SegmentedControl
+from clearscanner.ui.toggle_switch import ToggleSwitch
 from clearscanner.ui.update_worker import UpdateCheckWorker, UpdateDownloadWorker
 
 OPEN_FILTER = "Images and PDFs (*.png *.jpg *.jpeg *.bmp *.pdf)"
@@ -52,22 +53,48 @@ PDF_FILTER = "PDF (*.pdf)"
 DESKTOP_DIR = os.path.join(os.path.expanduser("~"), "Desktop")
 
 
-def _card(inner: QWidget, margin: int = 10) -> QFrame:
-    """Wrap `inner` in a rounded, shadowed card panel (see ui/theme.py)."""
+def _card(inner: QWidget, margin: int = 10, shadow: bool = True) -> QFrame:
+    """Wrap `inner` in a rounded card panel (see ui/theme.py QFrame#card)."""
     frame = QFrame()
     frame.setObjectName("card")
     layout = QVBoxLayout(frame)
     layout.setContentsMargins(margin, margin, margin, margin)
     layout.addWidget(inner)
-    theme.apply_shadow(frame)
+    if shadow:
+        theme.apply_shadow(frame)
     return frame
+
+
+def _section_label(text: str) -> QLabel:
+    label = QLabel(text.upper())
+    label.setObjectName("sectionLabel")
+    return label
+
+
+def _hairline(vertical: bool = False) -> QFrame:
+    line = QFrame()
+    line.setFrameShape(QFrame.VLine if vertical else QFrame.HLine)
+    line.setStyleSheet(f"color: {theme.EDGE}; background: {theme.EDGE};")
+    line.setFixedWidth(1) if vertical else line.setFixedHeight(1)
+    return line
+
+
+def _icon_button(name: str, tooltip: str, kind: str = "icon", on_accent: bool = False) -> QPushButton:
+    btn = QPushButton()
+    theme.set_kind(btn, kind)
+    color = "#FFFFFF" if on_accent else theme.INK_SOFT
+    btn.setIcon(icons.icon(name, color, px=44))
+    btn.setIconSize(icons.size(19 if kind == "icon" else 22))
+    btn.setToolTip(tooltip)
+    return btn
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"Desktop Scanner {__version__}")
-        self.resize(1000, 720)
+        self.resize(1200, 820)
+        self.setMinimumSize(940, 640)
 
         self._original_image = None  # BGR ndarray, as loaded
         self._initial_corners = None  # detected/fallback corners, for Reset
@@ -139,36 +166,38 @@ class MainWindow(QMainWindow):
     # ---- UI construction -------------------------------------------------
 
     def _build_ui(self):
-        brand = QLabel("Desktop Scanner")
-        brand.setObjectName("pageTitle")
+        rail = self._build_rail()
 
-        open_btn = QPushButton("+ Add Page(s)")
-        open_btn.setToolTip("Select one or more images — you'll crop/filter each in turn")
-        theme.set_kind(open_btn, "primary")
-        open_btn.clicked.connect(self._on_open)
+        # ---- header row --------------------------------------------------
+        self._title_label = QLabel("Add a document")
+        self._title_label.setObjectName("pageTitle")
 
         self._batch_progress_label = QLabel("")
         self._batch_progress_label.setObjectName("hint")
 
-        self._export_btn = QPushButton("Export PDF")
-        theme.set_kind(self._export_btn, "primary")
-        self._export_btn.clicked.connect(self._on_export_pdf)
-        self._export_btn.setEnabled(False)
-
-        self._print_btn = QPushButton("Print")
+        self._print_btn = QPushButton("  Print")
+        self._print_btn.setIcon(icons.icon("print", theme.INK_SOFT, px=44))
+        self._print_btn.setIconSize(icons.size(16))
         self._print_btn.clicked.connect(self._on_print)
         self._print_btn.setEnabled(False)
 
-        top_bar = QHBoxLayout()
-        top_bar.addWidget(brand)
-        top_bar.addSpacing(24)
-        top_bar.addWidget(open_btn)
-        top_bar.addSpacing(16)
-        top_bar.addWidget(self._batch_progress_label)
-        top_bar.addStretch()
-        top_bar.addWidget(self._print_btn)
-        top_bar.addWidget(self._export_btn)
+        self._export_btn = QPushButton("  Export PDF")
+        theme.set_kind(self._export_btn, "primary")
+        self._export_btn.setIcon(icons.icon("download", "#FFFFFF", px=44))
+        self._export_btn.setIconSize(icons.size(16))
+        self._export_btn.clicked.connect(self._on_export_pdf)
+        self._export_btn.setEnabled(False)
 
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        header.addWidget(self._title_label)
+        header.addSpacing(10)
+        header.addWidget(self._batch_progress_label)
+        header.addStretch()
+        header.addWidget(self._print_btn)
+        header.addWidget(self._export_btn)
+
+        # ---- work area --------------------------------------------------
         self._stack = QStackedWidget()
         self._stack.addWidget(self._build_crop_page())
         self._stack.addWidget(self._build_preview_page())
@@ -176,62 +205,98 @@ class MainWindow(QMainWindow):
         self._page_list = PageList()
         self._page_list.pagesChanged.connect(self._on_pages_changed)
         self._page_list.pageSelected.connect(self._on_page_selected)
-        self._page_list.setFixedWidth(200)
+        self._page_list.setFixedWidth(212)
 
         content = QHBoxLayout()
-        content.setSpacing(16)
+        content.setSpacing(18)
         content.addWidget(self._page_list)
         content.addWidget(self._stack, stretch=1)
 
-        layout = QVBoxLayout()
-        layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(16)
-        layout.addLayout(top_bar)
-        layout.addLayout(content, stretch=1)
+        main_col = QVBoxLayout()
+        main_col.setContentsMargins(24, 18, 24, 16)
+        main_col.setSpacing(14)
+        main_col.addLayout(header)
+        main_col.addWidget(_hairline())
+        main_col.addLayout(content, stretch=1)
+
+        root = QHBoxLayout()
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        root.addWidget(rail)
+        root.addLayout(main_col, stretch=1)
 
         container = QWidget()
-        container.setLayout(layout)
+        container.setLayout(root)
         self.setCentralWidget(container)
         self.setStatusBar(QStatusBar())
+        self.statusBar().setSizeGripEnabled(False)
+
+    def _build_rail(self) -> QFrame:
+        rail = QFrame()
+        rail.setObjectName("rail")
+        rail.setFixedWidth(66)
+
+        logo = QLabel()
+        logo.setPixmap(icons.icon("scan", theme.ACCENT, px=52).pixmap(24, 24))
+        logo.setObjectName("railLogo")
+        logo.setAlignment(Qt.AlignCenter)
+        logo.setFixedSize(44, 44)
+
+        add_btn = QPushButton()
+        theme.set_kind(add_btn, "rail-primary")
+        add_btn.setIcon(icons.icon("plus", "#FFFFFF", px=44))
+        add_btn.setIconSize(icons.size(20))
+        add_btn.setToolTip("Add photos or a PDF")
+        add_btn.clicked.connect(self._on_open)
+
+        info_btn = QPushButton()
+        theme.set_kind(info_btn, "rail")
+        info_btn.setIcon(icons.icon("info", theme.MUTED, px=44))
+        info_btn.setIconSize(icons.size(18))
+        info_btn.setToolTip("About Desktop Scanner")
+        info_btn.clicked.connect(self._on_about)
+
+        layout = QVBoxLayout(rail)
+        layout.setContentsMargins(11, 14, 11, 14)
+        layout.setSpacing(12)
+        layout.addWidget(logo, alignment=Qt.AlignHCenter)
+        layout.addSpacing(4)
+        layout.addWidget(add_btn, alignment=Qt.AlignHCenter)
+        layout.addStretch()
+        layout.addWidget(info_btn, alignment=Qt.AlignHCenter)
+        return rail
 
     def _build_crop_page(self) -> QWidget:
         self._crop_editor = CropEditor()
 
-        hint = QLabel("Drag the corners to match the document edges, then confirm.")
-        hint.setObjectName("hint")
-        hint.setAlignment(Qt.AlignCenter)
-
-        reset_btn = QPushButton("Reset to Auto-Detect")
+        reset_btn = QPushButton("  Reset to auto-detect")
+        theme.set_kind(reset_btn, "ghost")
+        reset_btn.setIcon(icons.icon("reset", theme.INK_SOFT, px=44))
+        reset_btn.setIconSize(icons.size(15))
         reset_btn.clicked.connect(self._on_reset_corners)
 
-        rotate_left_btn = QPushButton("↺")
-        theme.set_kind(rotate_left_btn, "icon")
-        rotate_left_btn.setToolTip("Rotate Left")
+        rotate_left_btn = _icon_button("rotate-left", "Rotate left")
         rotate_left_btn.clicked.connect(lambda: self._on_rotate_source(cv2.ROTATE_90_COUNTERCLOCKWISE))
-
-        rotate_right_btn = QPushButton("↻")
-        theme.set_kind(rotate_right_btn, "icon")
-        rotate_right_btn.setToolTip("Rotate Right")
+        rotate_right_btn = _icon_button("rotate-right", "Rotate right")
         rotate_right_btn.clicked.connect(lambda: self._on_rotate_source(cv2.ROTATE_90_CLOCKWISE))
 
-        confirm_btn = QPushButton("✓")
-        theme.set_kind(confirm_btn, "icon-primary")
-        confirm_btn.setToolTip("Confirm Crop")
+        confirm_btn = _icon_button("check", "Confirm crop", kind="icon-primary", on_accent=True)
         confirm_btn.clicked.connect(self._on_confirm_crop)
 
-        bottom_bar = QHBoxLayout()
-        bottom_bar.addWidget(reset_btn)
-        bottom_bar.addStretch()
-        bottom_bar.addWidget(rotate_left_btn)
-        bottom_bar.addWidget(rotate_right_btn)
-        bottom_bar.addSpacing(12)
-        bottom_bar.addWidget(confirm_btn)
+        bar = QHBoxLayout()
+        bar.setSpacing(8)
+        bar.addWidget(reset_btn)
+        bar.addStretch()
+        bar.addWidget(rotate_left_btn)
+        bar.addWidget(rotate_right_btn)
+        bar.addSpacing(10)
+        bar.addWidget(confirm_btn)
 
         layout = QVBoxLayout()
-        layout.setSpacing(12)
-        layout.addWidget(hint)
-        layout.addWidget(_card(self._crop_editor), stretch=1)
-        layout.addLayout(bottom_bar)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(14)
+        layout.addWidget(_card(self._crop_editor, margin=8), stretch=1)
+        layout.addLayout(bar)
 
         page = QWidget()
         page.setLayout(layout)
@@ -240,7 +305,7 @@ class MainWindow(QMainWindow):
     def _build_preview_page(self) -> QWidget:
         self._preview = QLabel("No image loaded")
         self._preview.setAlignment(Qt.AlignCenter)
-        self._preview.setMinimumSize(400, 400)
+        self._preview.setMinimumSize(400, 380)
         self._preview.setObjectName("hint")
         # Ignored (not the QLabel default of Preferred): a QLabel's sizeHint
         # tracks whatever pixmap is currently set, so leaving the default
@@ -248,100 +313,99 @@ class MainWindow(QMainWindow):
         # while dragging an Enhance slider) nudged the layout, which
         # resized the label, which changed the sizeHint again — a feedback
         # loop that showed up as the preview visibly jittering up/down.
-        # Ignored tells the layout to size this label purely from the
-        # surrounding stretch (still floored by setMinimumSize above),
-        # never from its own content.
         self._preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self._filter_tabs = SegmentedControl(
             filters.COLOR_MODES, on_change=self._on_filter_changed, default="clear"
         )
-        self._filter_tabs.setMaximumWidth(420)
+        self._filter_tabs.setMaximumWidth(400)
 
-        divider = QFrame()
-        divider.setFrameShape(QFrame.VLine)
-        divider.setFixedHeight(30)
-        divider.setStyleSheet(f"color: {theme.BORDER};")
+        self._bw_toggle = ToggleSwitch("Colour", "B&W")
+        self._bw_toggle.toggled.connect(self._on_bw_changed)
 
-        self._bw_tabs = SegmentedControl(("color", "bw"), on_change=self._on_bw_changed, default="color")
-        self._bw_tabs.setMaximumWidth(160)
-
-        self._recrop_btn = QPushButton("Re-crop")
-        self._recrop_btn.clicked.connect(self._on_recrop)
-
-        self._enhance_btn = QPushButton("Enhance")
-        self._enhance_btn.setCheckable(True)
-        theme.set_kind(self._enhance_btn, "tab")
-        self._enhance_btn.toggled.connect(self._on_enhance_toggled)
-
-        self._save_btn = QPushButton("Save As...")
-        self._save_btn.clicked.connect(self._on_save)
-        self._save_btn.setEnabled(False)
-
-        self._add_page_btn = QPushButton("Add to Document")
-        theme.set_kind(self._add_page_btn, "primary")
-        self._add_page_btn.clicked.connect(self._on_add_to_document)
-        self._add_page_btn.setEnabled(False)
-
-        top_bar = QHBoxLayout()
-        top_bar.addStretch()
-        top_bar.addWidget(self._filter_tabs)
-        top_bar.addSpacing(14)
-        top_bar.addWidget(divider)
-        top_bar.addSpacing(14)
-        top_bar.addWidget(self._bw_tabs)
-        top_bar.addStretch()
+        style_row = QHBoxLayout()
+        style_row.setSpacing(12)
+        style_row.addWidget(_section_label("Scan style"))
+        style_row.addSpacing(2)
+        style_row.addWidget(self._filter_tabs)
+        style_row.addStretch()
+        style_row.addWidget(_section_label("Colour"))
+        style_row.addWidget(self._bw_toggle)
 
         self._enhance_panel = self._build_enhance_panel()
         self._enhance_panel.setVisible(False)
 
-        bottom_bar = QHBoxLayout()
-        bottom_bar.addWidget(self._recrop_btn)
-        bottom_bar.addWidget(self._enhance_btn)
-        bottom_bar.addStretch()
-        bottom_bar.addWidget(self._save_btn)
-        bottom_bar.addWidget(self._add_page_btn)
+        # ---- action row ----
+        self._recrop_btn = QPushButton("  Re-crop")
+        theme.set_kind(self._recrop_btn, "ghost")
+        self._recrop_btn.setIcon(icons.icon("crop", theme.INK_SOFT, px=44))
+        self._recrop_btn.setIconSize(icons.size(15))
+        self._recrop_btn.clicked.connect(self._on_recrop)
 
-        ocr_label = QLabel("OCR:")
-        ocr_label.setObjectName("hint")
+        self._enhance_btn = QPushButton("  Adjust")
+        self._enhance_btn.setCheckable(True)
+        theme.set_kind(self._enhance_btn, "ghost")
+        self._enhance_btn.setIcon(icons.icon("sliders", theme.INK_SOFT, px=44))
+        self._enhance_btn.setIconSize(icons.size(15))
+        self._enhance_btn.toggled.connect(self._on_enhance_toggled)
 
         self._ocr_lang_combo = QComboBox()
         self._ocr_lang_combo.addItems(ocr.LANGUAGES.keys())
         self._ocr_lang_combo.setCurrentText("English + Bengali")
+        self._ocr_lang_combo.setToolTip("OCR language")
 
-        self._ocr_btn = QPushButton("Extract Text")
+        self._ocr_btn = QPushButton("  Extract text")
+        theme.set_kind(self._ocr_btn, "ghost")
+        self._ocr_btn.setIcon(icons.icon("text", theme.INK_SOFT, px=44))
+        self._ocr_btn.setIconSize(icons.size(15))
         self._ocr_btn.clicked.connect(self._on_extract_text)
         self._ocr_btn.setEnabled(False)
 
-        ocr_bar = QHBoxLayout()
-        ocr_bar.addWidget(ocr_label)
-        ocr_bar.addWidget(self._ocr_lang_combo)
-        ocr_bar.addWidget(self._ocr_btn)
-        ocr_bar.addStretch()
+        self._save_btn = QPushButton("Save copy")
+        self._save_btn.clicked.connect(self._on_save)
+        self._save_btn.setEnabled(False)
+
+        self._add_page_btn = QPushButton("  Add to document")
+        theme.set_kind(self._add_page_btn, "primary")
+        self._add_page_btn.setIcon(icons.icon("plus", "#FFFFFF", px=44))
+        self._add_page_btn.setIconSize(icons.size(15))
+        self._add_page_btn.clicked.connect(self._on_add_to_document)
+        self._add_page_btn.setEnabled(False)
+
+        action_row = QHBoxLayout()
+        action_row.setSpacing(8)
+        action_row.addWidget(self._recrop_btn)
+        action_row.addWidget(self._enhance_btn)
+        action_row.addSpacing(6)
+        action_row.addWidget(self._ocr_lang_combo)
+        action_row.addWidget(self._ocr_btn)
+        action_row.addStretch()
+        action_row.addWidget(self._save_btn)
+        action_row.addWidget(self._add_page_btn)
+
+        controls = QFrame()
+        controls.setObjectName("card")
+        cl = QVBoxLayout(controls)
+        cl.setContentsMargins(16, 14, 16, 14)
+        cl.setSpacing(12)
+        cl.addLayout(style_row)
+        cl.addWidget(self._enhance_panel)
+        cl.addWidget(_hairline())
+        cl.addLayout(action_row)
 
         layout = QVBoxLayout()
-        layout.setSpacing(12)
-        layout.addLayout(top_bar)
-        layout.addWidget(_card(self._preview), stretch=1)
-        layout.addWidget(self._enhance_panel)
-        layout.addLayout(bottom_bar)
-        layout.addLayout(ocr_bar)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(14)
+        layout.addWidget(_card(self._preview, margin=8), stretch=1)
+        layout.addWidget(controls)
 
         page = QWidget()
         page.setLayout(layout)
 
-        # The preview image has a hard minimum size (see self._preview
-        # above) and the Enhance panel adds ~150px of its own when open —
-        # on a short window those can together demand more height than the
-        # window actually has. Without a scroll area, Qt resolves that
-        # over-constrained layout by compressing the preview card below its
-        # own minimum, which the label refuses to honor: it overflows its
-        # card and overlaps whatever comes after it, and because every
-        # Enhance slider tick re-triggers this same unstable layout
-        # resolution, the overlap visibly shifts — which read as the whole
-        # page "jumping". A QScrollArea sidesteps the conflict entirely:
-        # everything gets its real minimum size, and a scrollbar (only
-        # appearing when needed) reaches whatever doesn't fit.
+        # QScrollArea guards the over-constrained case: preview has a hard
+        # minimum and the Adjust panel adds height when open — on a short
+        # window a scrollbar reaches what doesn't fit rather than the
+        # preview overflowing its card.
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
@@ -349,23 +413,18 @@ class MainWindow(QMainWindow):
         return scroll
 
     def _build_enhance_panel(self) -> QWidget:
-        """Brightness / Contrast / Saturation touch-up sliders, applied on
-        top of whichever color-mode preset is selected (see
-        core.filters.apply_enhancement) — hidden until "Enhance" is toggled
-        on. Saturation only makes sense in Color (see _update_saturation_visibility)."""
+        """Brightness / Contrast / Saturation touch-up sliders, layered on
+        top of whichever preset is selected (core.filters.apply_enhancement)
+        — hidden until "Adjust" is toggled. Saturation only applies in
+        Colour (see _update_saturation_visibility)."""
         panel = QFrame()
-        panel.setObjectName("card")
-        theme.apply_shadow(panel)
+        panel.setObjectName("innerPanel")
 
         header = QHBoxLayout()
-        title = QLabel("Enhance")
-        title.setObjectName("hint")
-        reset_btn = QPushButton("↺")
-        theme.set_kind(reset_btn, "icon")
-        reset_btn.setToolTip("Reset adjustments")
-        reset_btn.clicked.connect(self._on_reset_enhance)
-        header.addWidget(title)
+        header.addWidget(_section_label("Fine adjust"))
         header.addStretch()
+        reset_btn = _icon_button("reset", "Reset adjustments")
+        reset_btn.clicked.connect(self._on_reset_enhance)
         header.addWidget(reset_btn)
 
         self._brightness_slider, brightness_row = self._make_enhance_slider("Brightness")
@@ -373,8 +432,8 @@ class MainWindow(QMainWindow):
         self._saturation_slider, self._saturation_row = self._make_enhance_slider("Saturation")
 
         outer = QVBoxLayout(panel)
-        outer.setContentsMargins(16, 12, 16, 12)
-        outer.setSpacing(10)
+        outer.setContentsMargins(14, 12, 14, 14)
+        outer.setSpacing(9)
         outer.addLayout(header)
         outer.addWidget(brightness_row)
         outer.addWidget(contrast_row)
@@ -384,22 +443,23 @@ class MainWindow(QMainWindow):
     def _make_enhance_slider(self, label_text: str):
         label = QLabel(label_text)
         label.setObjectName("hint")
-        label.setFixedWidth(80)
+        label.setFixedWidth(74)
 
         slider = QSlider(Qt.Horizontal)
         slider.setRange(-100, 100)
         slider.setValue(0)
 
         value_label = QLabel("0")
-        value_label.setObjectName("hint")
-        value_label.setFixedWidth(32)
-        value_label.setAlignment(Qt.AlignRight)
-        slider.valueChanged.connect(lambda v, lbl=value_label: lbl.setText(str(v)))
+        value_label.setObjectName("valueChip")
+        value_label.setFixedWidth(38)
+        value_label.setAlignment(Qt.AlignCenter)
+        slider.valueChanged.connect(lambda v, lbl=value_label: lbl.setText(f"{v:+d}" if v else "0"))
         slider.valueChanged.connect(lambda _v: self._enhance_timer.start())
 
         row = QWidget()
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(12)
         row_layout.addWidget(label)
         row_layout.addWidget(slider, stretch=1)
         row_layout.addWidget(value_label)
@@ -426,6 +486,7 @@ class MainWindow(QMainWindow):
     # ---- Page transitions -----------------------------------------------
 
     def _animate_to_page(self, index: int):
+        self._title_label.setText("Adjust the edges" if index == 0 else "Review & export")
         if self._stack.currentIndex() == index:
             return
         self._stack.setCurrentIndex(index)
@@ -460,7 +521,7 @@ class MainWindow(QMainWindow):
                 return
             self._batch_skip_crop = not dialog.border_adjustment()
             self._filter_tabs.setCurrent(dialog.mode())
-            self._bw_tabs.setCurrent("bw" if dialog.bw() else "color")
+            self._bw_toggle.setCurrent(dialog.bw())
             self._update_saturation_visibility()
 
         self._pending_images = list(paths[1:])
@@ -603,7 +664,7 @@ class MainWindow(QMainWindow):
         self._warped_image = warped
         self._viewing_page_index = None  # a fresh crop, not re-filtering an existing page
         self._filter_tabs.setEnabled(True)
-        self._bw_tabs.setEnabled(True)
+        self._bw_toggle.setEnabled(True)
         self._recrop_btn.setEnabled(True)
         self._on_reset_enhance()  # a new source image starts with neutral Enhance
         self._animate_to_page(1)
@@ -623,23 +684,23 @@ class MainWindow(QMainWindow):
         if self._warped_image is not None:
             self._apply_filter()
 
-    def _on_bw_changed(self, _mode):
-        # Mode tabs stay clickable in both Color and B/W — every mode has
-        # its own matching B&W rendering (see core/filters.py), it isn't
-        # one generic monochrome output that makes the tabs moot.
+    def _on_bw_changed(self, _checked=False):
+        # Style tabs stay live in both Colour and B&W — every mode has its
+        # own matching B&W rendering (see core/filters.py), it isn't one
+        # generic monochrome output that makes the tabs moot.
         self._update_saturation_visibility()
         if self._warped_image is not None:
             self._apply_filter()
 
     def _update_saturation_visibility(self):
         # A grayscale page has no color channel for Saturation to touch.
-        self._saturation_row.setVisible(self._bw_tabs.current() != "bw")
+        self._saturation_row.setVisible(not self._bw_toggle.isChecked())
 
     def _apply_filter(self):
         if self._warped_image is None:
             return
         mode = self._filter_tabs.current()
-        bw = self._bw_tabs.current() == "bw"
+        bw = self._bw_toggle.isChecked()
 
         # Tabs/toggle stay clickable throughout — a slower mode (e.g. "Clear"
         # at ~1.5s on a big photo) must never eat a click made while it's
@@ -857,7 +918,7 @@ class MainWindow(QMainWindow):
         self._add_page_btn.setEnabled(False)
         self._recrop_btn.setEnabled(False)
         self._filter_tabs.setEnabled(True)
-        self._bw_tabs.setEnabled(True)
+        self._bw_toggle.setEnabled(True)
         self.statusBar().showMessage(f"Viewing page {index + 1} — pick a filter to update it.", 4000)
 
     def _on_export_pdf(self):
@@ -900,6 +961,18 @@ class MainWindow(QMainWindow):
         finally:
             painter.end()
         self.statusBar().showMessage(f"Sent {len(pages)} page(s) to the printer.", 5000)
+
+    # ---- About -------------------------------------------------------
+
+    def _on_about(self):
+        QMessageBox.about(
+            self,
+            "Desktop Scanner",
+            f"<b>Desktop Scanner</b> {__version__}<br><br>"
+            "Turn photos and PDFs of documents into clean, straightened, "
+            "multi-page scans — entirely on your computer.<br><br>"
+            '<a href="https://manasij123.github.io/desktop-scanner/">manasij123.github.io/desktop-scanner</a>',
+        )
 
     # ---- Auto-update -------------------------------------------------
 

@@ -17,6 +17,8 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('certifi')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 hiddenimports += ['requests', 'charset_normalizer', 'urllib3', 'idna']
+# QtSvg backs the line-icon rendering in clearscanner.ui.icons.
+hiddenimports += ['PySide6.QtSvg']
 
 
 a = Analysis(

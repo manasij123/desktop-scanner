@@ -7,14 +7,16 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
+    QLabel,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QStackedLayout,
     QVBoxLayout,
     QWidget,
 )
 
-from clearscanner.ui import theme
+from clearscanner.ui import icons, theme
 from clearscanner.ui.qt_image import to_pixmap
 
 THUMB_SIZE = QSize(120, 160)
@@ -36,7 +38,7 @@ def _make_thumbnail(image: np.ndarray) -> np.ndarray:
     new_w, new_h = max(1, round(w * scale)), max(1, round(h * scale))
     resized = cv2.resize(display, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
-    canvas = np.full((th, tw, 3), (0x36, 0x2f, 0x2a), dtype=np.uint8)  # theme.BG_ELEV_2 "#2a2f36", BGR order
+    canvas = np.full((th, tw, 3), (0xE0, 0xE9, 0xEC), dtype=np.uint8)  # theme.SURFACE_SUNK "#ECE9E0", BGR order
     x, y = (tw - new_w) // 2, (th - new_h) // 2
     canvas[y:y + new_h, x:x + new_w] = resized
     return canvas
@@ -71,38 +73,70 @@ class PageList(QWidget):
         self._list.setWrapping(False)
         self._list.setDragDropMode(QAbstractItemView.InternalMove)
         self._list.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._list.setFrameShape(QListWidget.NoFrame)
         self._list.model().rowsMoved.connect(self._sync_order_from_widget)
         self._list.currentRowChanged.connect(self._on_current_row_changed)
-        theme.apply_shadow(self._list)
 
-        rotate_left_btn = QPushButton("↺")
-        theme.set_kind(rotate_left_btn, "icon")
-        rotate_left_btn.setToolTip("Rotate Left")
-        rotate_left_btn.clicked.connect(lambda: self._rotate_selected(cv2.ROTATE_90_COUNTERCLOCKWISE))
+        self._empty = QLabel("No pages yet.\n\nAdd a photo or PDF\nwith the + button.")
+        self._empty.setObjectName("hint")
+        self._empty.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
+        self._empty.setWordWrap(True)
+        self._empty.setContentsMargins(0, 28, 0, 0)
 
-        rotate_right_btn = QPushButton("↻")
-        theme.set_kind(rotate_right_btn, "icon")
-        rotate_right_btn.setToolTip("Rotate Right")
-        rotate_right_btn.clicked.connect(lambda: self._rotate_selected(cv2.ROTATE_90_CLOCKWISE))
+        # ---- header: PAGES · n + per-page tools ----
+        self._count_label = QLabel("PAGES")
+        self._count_label.setObjectName("sectionLabel")
 
-        delete_btn = QPushButton("✕")
-        theme.set_kind(delete_btn, "icon-danger")
-        delete_btn.setToolTip("Delete Page")
-        delete_btn.clicked.connect(self._delete_selected)
+        def tool(name, tip, kind, cb):
+            b = QPushButton()
+            theme.set_kind(b, kind)
+            b.setIcon(icons.icon(name, theme.DANGER if kind == "icon-danger" else theme.INK_SOFT, px=40))
+            b.setIconSize(QSize(15, 15))
+            b.setFixedSize(30, 30)
+            b.setToolTip(tip)
+            b.clicked.connect(cb)
+            return b
 
-        icon_row = QHBoxLayout()
-        icon_row.setSpacing(8)
-        icon_row.addWidget(rotate_left_btn)
-        icon_row.addWidget(rotate_right_btn)
-        icon_row.addStretch()
-        icon_row.addWidget(delete_btn)
+        rotate_left_btn = tool("rotate-left", "Rotate left", "icon",
+                               lambda: self._rotate_selected(cv2.ROTATE_90_COUNTERCLOCKWISE))
+        rotate_right_btn = tool("rotate-right", "Rotate right", "icon",
+                                lambda: self._rotate_selected(cv2.ROTATE_90_CLOCKWISE))
+        delete_btn = tool("trash", "Delete page", "icon-danger", self._delete_selected)
+
+        header = QHBoxLayout()
+        header.setSpacing(3)
+        header.addWidget(self._count_label)
+        header.addStretch()
+        header.addWidget(rotate_left_btn)
+        header.addWidget(rotate_right_btn)
+        header.addWidget(delete_btn)
+
+        stack = QStackedLayout()
+        stack.setStackingMode(QStackedLayout.StackAll)
+        stack.addWidget(self._list)
+        stack.addWidget(self._empty)
+
+        from PySide6.QtWidgets import QFrame
+        body = QFrame()
+        body.setObjectName("card")
+        bl = QVBoxLayout(body)
+        bl.setContentsMargins(12, 10, 12, 12)
+        bl.setSpacing(8)
+        bl.addLayout(header)
+        bl.addLayout(stack, stretch=1)
+        theme.apply_shadow(body)
 
         layout = QVBoxLayout()
-        layout.setSpacing(8)
-        layout.addWidget(self._list, stretch=1)
-        layout.addSpacing(4)
-        layout.addLayout(icon_row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(body)
         self.setLayout(layout)
+        self._update_header()
+
+    def _update_header(self):
+        n = len(self._pages)
+        self._count_label.setText("PAGES" if not n else f"PAGES · {n}")
+        self._empty.setVisible(n == 0)
+        self._list.setVisible(n > 0)
 
     # ---- public API --------------------------------------------------
 
@@ -180,6 +214,7 @@ class PageList(QWidget):
         self._warped_pages = new_warped
         self._fallback_flags = new_fallback
         self._renumber_labels()
+        self._update_header()
         self.pagesChanged.emit()
 
     def _renumber_labels(self):
@@ -197,3 +232,4 @@ class PageList(QWidget):
             item.setData(FALLBACK_ROLE, self._fallback_flags[i])
             self._list.addItem(item)
         self._list.blockSignals(False)
+        self._update_header()

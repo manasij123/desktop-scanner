@@ -84,7 +84,7 @@ class CropEditor(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
-        painter.fillRect(self.rect(), QColor(theme.BG))
+        painter.fillRect(self.rect(), QColor(theme.SURFACE_SUNK))
         if self._pixmap is None:
             painter.end()
             return
