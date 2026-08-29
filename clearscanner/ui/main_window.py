@@ -113,16 +113,27 @@ class MainWindow(QMainWindow):
         self._enhance_timer.timeout.connect(self._apply_enhancement)
 
         self._build_ui()
-        threading.Thread(target=detector.warm_up, daemon=True).start()
 
-        # Auto-update: check GitHub Releases in the background; if a newer
-        # build exists, download it quietly and offer to install (see
-        # _on_update_available). No-op when running from source.
+        # Auto-update state (see _on_update_available); the check itself is
+        # kicked off from _start_background_tasks after the window is shown.
         self._update_check_worker = None
         self._update_download_worker = None
         self._pending_update_installer = None  # path, once downloaded
         self._pending_update_version = None
         self._install_update_on_exit = False
+        self._background_tasks_started = False
+
+        # The ML model warm-up and the update check both do heavy work
+        # (loading onnxruntime, a network round-trip) that fights the UI
+        # thread for the GIL during construction and first paint. Defer
+        # them until the window is actually on screen and idle.
+        QTimer.singleShot(1200, self._start_background_tasks)
+
+    def _start_background_tasks(self):
+        if self._background_tasks_started:
+            return
+        self._background_tasks_started = True
+        threading.Thread(target=detector.warm_up, daemon=True).start()
         self._start_update_check()
 
     # ---- UI construction -------------------------------------------------

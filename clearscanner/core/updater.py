@@ -14,8 +14,9 @@ import subprocess
 import sys
 import tempfile
 
-import requests
-
+# `requests` is imported lazily (see _requests()) — it's only touched on a
+# background thread after launch, and keeping it off the startup path
+# shaves ~1s off app start.
 from clearscanner._version import __version__
 
 REPO = "manasij123/desktop-scanner"
@@ -26,6 +27,11 @@ _HTTP_TIMEOUT = 15
 # process, which is about to exit. (Don't OR in CREATE_NO_WINDOW — Windows
 # rejects the two together.)
 _DETACHED = 0x00000008  # DETACHED_PROCESS
+
+
+def _requests():
+    import requests
+    return requests
 
 
 def is_frozen() -> bool:
@@ -56,7 +62,7 @@ def check_for_update():
     if not is_frozen():
         return None
     try:
-        resp = requests.get(
+        resp = _requests().get(
             _LATEST_RELEASE_API,
             timeout=_HTTP_TIMEOUT,
             headers={"Accept": "application/vnd.github+json"},
@@ -88,7 +94,7 @@ def download_installer(url: str, progress=None) -> str:
     fd, path = tempfile.mkstemp(prefix="DesktopScanner-Update-", suffix=".exe")
     os.close(fd)
     try:
-        with requests.get(url, stream=True, timeout=_HTTP_TIMEOUT) as resp:
+        with _requests().get(url, stream=True, timeout=_HTTP_TIMEOUT) as resp:
             resp.raise_for_status()
             total = int(resp.headers.get("Content-Length", 0))
             written = 0

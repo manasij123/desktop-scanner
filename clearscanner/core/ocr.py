@@ -8,7 +8,9 @@ import os
 import shutil
 
 import cv2
-import pytesseract
+
+# pytesseract is imported lazily (see _pt()) — it pulls in PIL and is only
+# needed when the user actually runs OCR, not at every app startup.
 
 _WINDOWS_DEFAULT_PATHS = [
     r"C:\Program Files\Tesseract-OCR\tesseract.exe",
@@ -23,18 +25,23 @@ _TESSDATA_DIR = os.path.join(os.path.dirname(__file__), "..", "assets", "tessdat
 LANGUAGES = {"English": "eng", "English + Bengali": "eng+ben"}
 
 
+def _pt():
+    import pytesseract
+    return pytesseract
+
+
 def _configure_tesseract_path():
     if shutil.which("tesseract"):
         return
     for path in _WINDOWS_DEFAULT_PATHS:
         if os.path.exists(path):
-            pytesseract.pytesseract.tesseract_cmd = path
+            _pt().pytesseract.tesseract_cmd = path
             return
 
 
 def is_available() -> bool:
     _configure_tesseract_path()
-    cmd = pytesseract.pytesseract.tesseract_cmd
+    cmd = _pt().pytesseract.tesseract_cmd
     return bool(shutil.which(cmd) or os.path.exists(cmd))
 
 
@@ -46,4 +53,4 @@ def extract_text(image, lang: str = "eng") -> str:
     # Set directly (not via a "--tessdata-dir <path>" config string): pytesseract
     # splits the config string with shlex, which mangles Windows backslash paths.
     os.environ["TESSDATA_PREFIX"] = os.path.abspath(_TESSDATA_DIR)
-    return pytesseract.image_to_string(image, lang=lang)
+    return _pt().image_to_string(image, lang=lang)

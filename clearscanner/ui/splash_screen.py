@@ -1,7 +1,11 @@
-"""Startup splash: loops the branded scan-intro GIF for a fixed window
-(long enough to actually watch the animation, and to give the main
-window's background model warm-up a real head start), then fades into
-the main window."""
+"""Startup splash: loops the branded scan-intro GIF while the rest of the
+app (heavy imports, the main window) loads on a worker thread, then fades
+into the main window.
+
+The caller drives dismissal with finish() rather than a fixed timer —
+loading a frozen build can take much longer than one GIF loop, and the
+splash needs to stay up for all of it. MIN_DURATION just stops it
+flickering past when loading happens to be fast (warm disk cache)."""
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QMovie
 from PySide6.QtWidgets import QApplication, QGraphicsOpacityEffect, QLabel, QWidget
@@ -10,12 +14,7 @@ from clearscanner.ui import theme
 
 SPLASH_WIDTH = 640
 SPLASH_HEIGHT = 360
-# The GIF's own metadata loops it forever (loopCount() == -1) — there's no
-# "play once" switch to ask Qt for (QMovie's loop count is read-only, set
-# by the file), so total on-screen time is controlled here instead, not by
-# waiting for the animation to end. ~0.5s per loop, so this is good for
-# several full loops.
-TOTAL_DURATION = 2600
+MIN_DURATION = 1600
 FADE_DURATION = 350
 
 
@@ -40,20 +39,38 @@ class SplashScreen(QWidget):
         self._opacity_effect.setOpacity(1.0)
 
         self._fade_anim = None
+        self._elapsed = QTimer(self)
+        self._min_elapsed = False
+        self._finish_requested = False
 
     def play(self):
         """Center on the primary screen and start looping the intro
-        animation; a fade into the main window follows automatically
-        after TOTAL_DURATION."""
+        animation. Call finish() once the app is ready to take over."""
         screen = QApplication.primaryScreen()
         geo = screen.geometry() if screen else None
         if geo is not None:
             self.move(geo.center().x() - SPLASH_WIDTH // 2, geo.center().y() - SPLASH_HEIGHT // 2)
         self.show()
         self._movie.start()
-        QTimer.singleShot(TOTAL_DURATION, self._fade_out)
+        QTimer.singleShot(MIN_DURATION, self._on_min_elapsed)
+
+    def _on_min_elapsed(self):
+        self._min_elapsed = True
+        if self._finish_requested:
+            self._fade_out()
+
+    def finish(self):
+        """Ask the splash to fade and hand off. If MIN_DURATION hasn't
+        passed yet the fade is deferred until it has."""
+        if self._finish_requested:
+            return
+        self._finish_requested = True
+        if self._min_elapsed:
+            self._fade_out()
 
     def _fade_out(self):
+        if self._fade_anim is not None:
+            return
         self._fade_anim = QPropertyAnimation(self._opacity_effect, b"opacity", self)
         self._fade_anim.setDuration(FADE_DURATION)
         self._fade_anim.setStartValue(1.0)

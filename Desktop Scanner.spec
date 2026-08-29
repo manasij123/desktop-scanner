@@ -28,7 +28,10 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    # Nothing in a Qt GUI scanner app needs an interactive shell or Tk —
+    # these get pulled in transitively (jedi alone is ~22 MB) and only
+    # bloat the bundle / slow first load.
+    excludes=['IPython', 'jedi', 'parso', 'tkinter', '_tkinter'],
     noarchive=False,
     optimize=0,
 )

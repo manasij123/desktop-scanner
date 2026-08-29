@@ -9,13 +9,14 @@ pages into the app as images at all.
 """
 import cv2
 import numpy as np
-import pymupdf as fitz
 
 RENDER_DPI = 300  # matches a typical camera-photo page at print resolution
 
 
 def render_pdf_pages(path: str, dpi: int = RENDER_DPI) -> list[np.ndarray]:
     """Return each page of the PDF at `path` as a BGR ndarray, in order."""
+    import pymupdf as fitz  # lazy: pymupdf is ~1s to import and only PDF imports need it
+
     pages = []
     zoom = dpi / 72.0  # PDF units are 1/72 inch; fitz's default render is 72 DPI
     matrix = fitz.Matrix(zoom, zoom)

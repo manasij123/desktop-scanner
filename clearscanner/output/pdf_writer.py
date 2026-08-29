@@ -7,16 +7,20 @@ expect a "page" to be, rather than a PDF where each page is a different
 custom size matching its source photo's raw pixel dimensions.
 """
 import cv2
-import img2pdf
 
-PAGE_SIZE = img2pdf.parse_pagesize_rectarg("a4")
-_LAYOUT_FUN = img2pdf.get_layout_fun(pagesize=PAGE_SIZE, fit=img2pdf.FitMode.into)
+# img2pdf is imported lazily inside images_to_pdf — it's only needed on
+# export, and keeping it off the startup import path speeds app launch.
 
 
 def images_to_pdf(images, output_path: str):
     """Write `images` (BGR or grayscale ndarrays, in order) as one PDF."""
     if not images:
         raise ValueError("No pages to export.")
+
+    import img2pdf
+
+    page_size = img2pdf.parse_pagesize_rectarg("a4")
+    layout_fun = img2pdf.get_layout_fun(pagesize=page_size, fit=img2pdf.FitMode.into)
 
     encoded = []
     for img in images:
@@ -26,4 +30,4 @@ def images_to_pdf(images, output_path: str):
         encoded.append(buf.tobytes())
 
     with open(output_path, "wb") as f:
-        f.write(img2pdf.convert(encoded, layout_fun=_LAYOUT_FUN))
+        f.write(img2pdf.convert(encoded, layout_fun=layout_fun))
