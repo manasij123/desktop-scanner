@@ -28,18 +28,30 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    # Nothing in a Qt GUI scanner app needs an interactive shell or Tk —
-    # these get pulled in transitively (jedi alone is ~22 MB) and only
-    # bloat the bundle / slow first load.
-    excludes=['IPython', 'jedi', 'parso', 'tkinter', '_tkinter'],
+    # Nothing here needs an interactive shell — jedi alone is ~22 MB.
+    # (tkinter is kept: the PyInstaller splash below uses Tk.)
+    excludes=['IPython', 'jedi', 'parso'],
     noarchive=False,
     optimize=0,
 )
 pyz = PYZ(a.pure)
 
+# Bootloader-level splash — a static image shown the instant the process
+# starts, seconds before Python/Qt finish loading on a cold run. main.py
+# closes it via pyi_splash once the animated Qt splash takes over.
+splash = Splash(
+    'clearscanner/assets/splash_static.png',
+    binaries=a.binaries,
+    datas=a.datas,
+    text_pos=None,
+    minify_script=True,
+)
+
 exe = EXE(
     pyz,
     a.scripts,
+    splash,
+    splash.binaries,
     [],
     exclude_binaries=True,
     name='Desktop Scanner',

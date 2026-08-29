@@ -15,6 +15,16 @@ from PySide6.QtWidgets import QApplication, QGraphicsOpacityEffect
 from clearscanner.ui import theme
 from clearscanner.ui.splash_screen import SplashScreen
 
+
+def _close_boot_splash():
+    """Dismiss the PyInstaller bootloader splash (frozen builds only)."""
+    try:
+        import pyi_splash  # provided by the bootloader when a Splash is bundled
+        pyi_splash.close()
+    except Exception:
+        pass
+
+
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "clearscanner", "assets")
 ICON_PATH = os.path.join(ASSETS_DIR, "icon.ico")
 SPLASH_GIF_PATH = os.path.join(ASSETS_DIR, "splash_animation.gif")
@@ -23,9 +33,14 @@ SPLASH_GIF_PATH = os.path.join(ASSETS_DIR, "splash_animation.gif")
 class _Loader(QThread):
     """Runs the heavy imports off the UI thread so the splash stays smooth."""
     ready = Signal()
+    failed = Signal(str)
 
     def run(self):
-        import clearscanner.ui.main_window  # noqa: F401  (populates the import cache)
+        try:
+            import clearscanner.ui.main_window  # noqa: F401  (populates the import cache)
+        except BaseException as exc:  # a hung splash is worse than a visible error
+            self.failed.emit(f"{type(exc).__name__}: {exc}")
+            return
         self.ready.emit()
 
 
@@ -37,6 +52,7 @@ def main():
 
     splash = SplashScreen(SPLASH_GIF_PATH)
     splash.play()
+    _close_boot_splash()  # hand off from the static boot splash to the animated one
 
     state = {}
 
@@ -47,6 +63,13 @@ def main():
         state["window"] = MainWindow()
         splash.finished.connect(reveal_window)
         splash.finish()
+
+    def on_load_failed(message):
+        from PySide6.QtWidgets import QMessageBox
+
+        splash.close()
+        QMessageBox.critical(None, "Desktop Scanner failed to start", message)
+        app.quit()
 
     def reveal_window():
         window = state["window"]
@@ -64,6 +87,7 @@ def main():
 
     loader = _Loader()
     loader.ready.connect(build_window)
+    loader.failed.connect(on_load_failed)
     loader.start()
     state["loader"] = loader  # keep the QThread alive
 
