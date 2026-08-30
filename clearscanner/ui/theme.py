@@ -91,14 +91,19 @@ QPushButton:pressed {{ background-color: rgba(236,231,243,0.95); }}
 QPushButton:disabled {{ color: {MUTED}; background-color: rgba(255,255,255,0.42); border-color: {_EDGE_Q}; }}
 
 QPushButton[kind="primary"] {{
-    background-color: {ACCENT};
-    border: 1px solid {ACCENT};
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #7767FF, stop:1 #5A45E0);
+    border: 1px solid #6B5BF0;
     color: {ON_ACCENT};
-    font-weight: 600;
+    font-weight: 700;
 }}
-QPushButton[kind="primary"]:hover  {{ background-color: {ACCENT_HOVER}; border-color: {ACCENT_HOVER}; }}
-QPushButton[kind="primary"]:pressed {{ background-color: {ACCENT_PRESSED}; border-color: {ACCENT_PRESSED}; }}
-QPushButton[kind="primary"]:disabled {{ background-color: #C7C0F0; border-color: #C7C0F0; color: #FFFFFF; }}
+QPushButton[kind="primary"]:hover  {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #8776FF, stop:1 #6A55F0);
+    border-color: #8776FF;
+}}
+QPushButton[kind="primary"]:pressed {{ background: {ACCENT_PRESSED}; border-color: {ACCENT_PRESSED}; }}
+QPushButton[kind="primary"]:disabled {{
+    background: #CDC7F0; border-color: #CDC7F0; color: #FFFFFF;
+}}
 
 QPushButton[kind="ghost"] {{
     background-color: transparent;
@@ -206,20 +211,38 @@ QCheckBox::indicator:hover {{ border-color: {ACCENT}; }}
 QCheckBox::indicator:checked {{ background: {ACCENT}; border-color: {ACCENT}; }}
 
 /* ---- surfaces ------------------------------------------------- */
+/* content sits on a near-solid card; floating controls are glass. */
 QFrame#card {{
+    background-color: rgba(255,255,255,0.86);
+    border: 1px solid {_GLASS_LINE};
+    border-radius: {RADIUS_LG}px;
+}}
+QFrame#glassCard {{
     background-color: {_GLASS};
     border: 1px solid {_GLASS_LINE};
     border-radius: {RADIUS_LG}px;
 }}
 QFrame#innerPanel {{
-    background-color: rgba(255,255,255,0.42);
+    background-color: rgba(255,255,255,0.40);
     border: 1px solid {_EDGE_Q};
     border-radius: {RADIUS}px;
 }}
 
-QLabel#pageTitle {{ color: {INK}; font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }}
+QLabel#pageTitle {{ color: {INK}; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }}
+QLabel#subTitle {{ color: {MUTED}; font-size: 12px; font-weight: 500; }}
 QLabel#hint {{ color: {MUTED}; font-size: 12.5px; }}
-QLabel#sectionLabel {{ color: {INK_SOFT}; font-size: 10.5px; font-weight: 800; letter-spacing: 1.0px; }}
+QLabel#sectionLabel {{ color: {INK_SOFT}; font-size: 10px; font-weight: 800; letter-spacing: 1.1px; }}
+
+QWidget#statPill {{
+    background-color: rgba(255,255,255,0.55);
+    border: 1px solid {_GLASS_LINE};
+    border-radius: 13px;
+}}
+QWidget#floatBar {{
+    background-color: rgba(255,255,255,0.72);
+    border: 1px solid {_GLASS_LINE};
+    border-radius: {RADIUS + 6}px;
+}}
 QLabel#valueChip {{
     color: {ACCENT_INK};
     background-color: {ACCENT_WASH};
@@ -314,4 +337,14 @@ def apply_shadow(widget: QWidget, blur: int = 50, y_offset: int = 18, alpha: int
     effect.setBlurRadius(blur)
     effect.setOffset(0, y_offset)
     effect.setColor(QColor(58, 40, 105, alpha))
+    widget.setGraphicsEffect(effect)
+
+
+def apply_glow(widget: QWidget, blur: int = 34, alpha: int = 120):
+    """A coloured bloom under the primary action — makes it read as the
+    one thing to click."""
+    effect = QGraphicsDropShadowEffect(widget)
+    effect.setBlurRadius(blur)
+    effect.setOffset(0, 6)
+    effect.setColor(QColor(91, 75, 230, alpha))
     widget.setGraphicsEffect(effect)

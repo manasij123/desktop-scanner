@@ -118,7 +118,7 @@ class PageList(QWidget):
 
         from PySide6.QtWidgets import QFrame
         body = QFrame()
-        body.setObjectName("card")
+        body.setObjectName("glassCard")
         bl = QVBoxLayout(body)
         bl.setContentsMargins(12, 10, 12, 12)
         bl.setSpacing(8)

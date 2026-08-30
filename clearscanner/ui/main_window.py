@@ -47,6 +47,7 @@ from clearscanner.ui.scan_worker import DetectWorker, FilterWorker, WarpWorker
 from clearscanner.ui.segmented_control import SegmentedControl
 from clearscanner.ui.toggle_switch import ToggleSwitch
 from clearscanner.ui.update_worker import UpdateCheckWorker, UpdateDownloadWorker
+from clearscanner.ui.widgets import Ring
 
 OPEN_FILTER = "Images and PDFs (*.png *.jpg *.jpeg *.bmp *.pdf)"
 SAVE_FILTER = "JPEG (*.jpg);;PNG (*.png)"
@@ -54,10 +55,11 @@ PDF_FILTER = "PDF (*.pdf)"
 DESKTOP_DIR = os.path.join(os.path.expanduser("~"), "Desktop")
 
 
-def _card(inner: QWidget, margin: int = 10, shadow: bool = True) -> QFrame:
-    """Wrap `inner` in a rounded card panel (see ui/theme.py QFrame#card)."""
+def _card(inner: QWidget, margin: int = 10, shadow: bool = True, glass: bool = False) -> QFrame:
+    """Wrap `inner` in a rounded card panel (see ui/theme.py). `glass` picks
+    the more transparent frosted variant for floating controls."""
     frame = QFrame()
-    frame.setObjectName("card")
+    frame.setObjectName("glassCard" if glass else "card")
     layout = QVBoxLayout(frame)
     layout.setContentsMargins(margin, margin, margin, margin)
     layout.addWidget(inner)
@@ -157,6 +159,27 @@ class MainWindow(QMainWindow):
         # them until the window is actually on screen and idle.
         QTimer.singleShot(1200, self._start_background_tasks)
 
+        # Cursor-parallax on the painted backdrop (see ui/backdrop.py).
+        QApplication.instance().installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        from PySide6.QtCore import QEvent
+
+        if event.type() == QEvent.MouseMove and isinstance(self.centralWidget(), Backdrop):
+            import time
+
+            now = time.monotonic()
+            if now - getattr(self, "_last_parallax", 0.0) > 0.10:
+                self._last_parallax = now
+                gp = event.globalPosition() if hasattr(event, "globalPosition") else None
+                if gp is not None:
+                    bd = self.centralWidget()
+                    pos = bd.mapFromGlobal(gp.toPoint())
+                    w, h = bd.width(), bd.height()
+                    if w and h:
+                        bd.drift_to((pos.x() / w - 0.5) * 2.0, (pos.y() / h - 0.5) * 2.0)
+        return super().eventFilter(obj, event)
+
     def _start_background_tasks(self):
         if self._background_tasks_started:
             return
@@ -172,9 +195,29 @@ class MainWindow(QMainWindow):
         # ---- header row --------------------------------------------------
         self._title_label = QLabel("Add a document")
         self._title_label.setObjectName("pageTitle")
+        self._subtitle_label = QLabel("Point it at a photo or a PDF to get started")
+        self._subtitle_label.setObjectName("subTitle")
+        title_col = QVBoxLayout()
+        title_col.setContentsMargins(0, 0, 0, 0)
+        title_col.setSpacing(1)
+        title_col.addWidget(self._title_label)
+        title_col.addWidget(self._subtitle_label)
 
         self._batch_progress_label = QLabel("")
         self._batch_progress_label.setObjectName("hint")
+
+        # Header infographic: one ring — spins during a filter run, otherwise
+        # shows the page count (filling as the document grows).
+        self._status_ring = Ring(42)
+        self._ring_caption = QLabel("PAGES")
+        self._ring_caption.setObjectName("sectionLabel")
+        ring_box = QHBoxLayout()
+        ring_box.setSpacing(8)
+        ring_box.addWidget(self._status_ring)
+        ring_box.addWidget(self._ring_caption)
+        self._ring_wrap = QWidget()
+        self._ring_wrap.setLayout(ring_box)
+        self._ring_wrap.setVisible(False)
 
         self._print_btn = QPushButton("  Print")
         self._print_btn.setIcon(icons.icon("print", theme.INK_SOFT, px=44))
@@ -188,13 +231,15 @@ class MainWindow(QMainWindow):
         self._export_btn.setIconSize(icons.size(16))
         self._export_btn.clicked.connect(self._on_export_pdf)
         self._export_btn.setEnabled(False)
+        theme.apply_glow(self._export_btn)
 
         header = QHBoxLayout()
-        header.setSpacing(10)
-        header.addWidget(self._title_label)
-        header.addSpacing(10)
+        header.setSpacing(12)
+        header.addLayout(title_col)
         header.addWidget(self._batch_progress_label)
         header.addStretch()
+        header.addWidget(self._ring_wrap)
+        header.addSpacing(6)
         header.addWidget(self._print_btn)
         header.addWidget(self._export_btn)
 
@@ -372,6 +417,7 @@ class MainWindow(QMainWindow):
         self._add_page_btn.setIconSize(icons.size(15))
         self._add_page_btn.clicked.connect(self._on_add_to_document)
         self._add_page_btn.setEnabled(False)
+        theme.apply_glow(self._add_page_btn)
 
         action_row = QHBoxLayout()
         action_row.setSpacing(8)
@@ -385,7 +431,7 @@ class MainWindow(QMainWindow):
         action_row.addWidget(self._add_page_btn)
 
         controls = QFrame()
-        controls.setObjectName("card")
+        controls.setObjectName("glassCard")
         cl = QVBoxLayout(controls)
         cl.setContentsMargins(16, 14, 16, 14)
         cl.setSpacing(12)
@@ -487,7 +533,12 @@ class MainWindow(QMainWindow):
     # ---- Page transitions -----------------------------------------------
 
     def _animate_to_page(self, index: int):
-        self._title_label.setText("Adjust the edges" if index == 0 else "Review & export")
+        if index == 0:
+            self._title_label.setText("Adjust the edges")
+            self._subtitle_label.setText("Drag the corners to match the document, then confirm")
+        else:
+            self._title_label.setText("Review & export")
+            self._subtitle_label.setText("Pick a look, fine-tune, then add the page to your document")
         if self._stack.currentIndex() == index:
             return
         self._stack.setCurrentIndex(index)
@@ -712,6 +763,9 @@ class MainWindow(QMainWindow):
         self._filter_request_id += 1
         request_id = self._filter_request_id
         self.statusBar().showMessage("Applying filter...")
+        self._ring_wrap.setVisible(True)
+        self._ring_caption.setText("WORKING")
+        self._status_ring.set_spinning(True)
 
         worker = FilterWorker(self._warped_image, mode, bw, allow_background_crush=self._detection_fallback_used)
         worker.resultReady.connect(lambda processed, rid=request_id: self._on_filter_applied(processed, rid))
@@ -723,6 +777,8 @@ class MainWindow(QMainWindow):
     def _on_filter_applied(self, processed, request_id: int):
         if request_id != self._filter_request_id:
             return  # a newer click superseded this request — discard
+        self._status_ring.set_spinning(False)
+        self._sync_pages_ring()
         self._base_processed_image = processed
         # Re-picking a filter/B&W keeps whatever Enhance adjustment is
         # currently dialed in (it reads as "compare presets with my
@@ -887,8 +943,15 @@ class MainWindow(QMainWindow):
     def _on_pages_changed(self):
         count = self._page_list.count()
         self._export_btn.setEnabled(count > 0)
-        self._export_btn.setText(f"Export PDF ({count})" if count else "Export PDF")
+        self._export_btn.setText(f"  Export PDF ({count})" if count else "  Export PDF")
         self._print_btn.setEnabled(count > 0)
+        self._sync_pages_ring()
+
+    def _sync_pages_ring(self):
+        count = self._page_list.count()
+        self._ring_caption.setText("PAGES")
+        self._ring_wrap.setVisible(count > 0)
+        self._status_ring.set_value(min(1.0, count / 8.0), str(count))
 
     def _on_page_selected(self, index: int):
         """Clicking a thumbnail in the sidebar shows that page in the main
