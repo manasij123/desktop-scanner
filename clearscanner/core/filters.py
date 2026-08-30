@@ -469,6 +469,108 @@ def _subject_mask_for_crush(image: np.ndarray) -> np.ndarray | None:
     return mask
 
 
+def _colored_fill_mask(image: np.ndarray, paper_confidence: float = 1.0) -> np.ndarray:
+    """Soft 0..1 mask of broad, strongly-coloured fill regions — the orange
+    / green letterhead bands on an ID card, a coloured header box, a
+    tricolour emblem block. Docs/Clear otherwise wreck these: the
+    illumination divide (see _correct_illumination) reads a wide uniform
+    band as its own local background and bleaches it toward white, and the
+    tone push / snap then finish it off, so "Government of India" on its
+    orange bar ends up as ragged grey mush with the lettering half eaten.
+    A real scanner app keeps the band as a clean solid fill with its text
+    knocked out. This mask is what _render_colored_fills paints back over.
+
+    HSV saturation, not LAB chroma: a dimly-lit photo desaturates a green
+    band to LAB-neutral while its S ratio still reads ~45+ (paper is
+    ~15). Opened on a downscaled copy to drop thin coloured strokes (a red
+    accent word, a red rule) — only genuine broad fills survive — then
+    scaled by paper_confidence so a non-document frame is untouched.
+    """
+    if paper_confidence <= 0:
+        return np.zeros(image.shape[:2], np.float32)
+    sm = cv2.bilateralFilter(image, d=5, sigmaColor=50, sigmaSpace=50)
+    hsv = cv2.cvtColor(sm, cv2.COLOR_BGR2HSV)
+    s = hsv[..., 1].astype(np.float32)
+    v = hsv[..., 2].astype(np.float32)
+    m = np.clip((s - 30.0) / 42.0, 0.0, 1.0) * ((v > 35) & (v < 250)).astype(np.float32)
+
+    h, w = m.shape
+    scale = min(1.0, 480.0 / min(h, w))
+    small = (cv2.resize(m, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+             if scale < 1.0 else m)
+    k = max(3, int(min(small.shape) * 0.016) | 1)
+    small = cv2.morphologyEx(small, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    small = cv2.morphologyEx(small, cv2.MORPH_CLOSE,
+                             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    # erode back a touch and keep the feather tight, so the mask doesn't
+    # bleed past the band edge into the paper gap and leave a halo there
+    small = cv2.erode(small, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    small = cv2.GaussianBlur(small, (0, 0), max(1.0, k * 0.35))
+    m = cv2.resize(small, (w, h), interpolation=cv2.INTER_LINEAR) if scale < 1.0 else small
+    m = np.clip(m, 0.0, 1.0).astype(np.float32)
+    # A genuine letterhead band / header box is a few percent of the page;
+    # a stray surviving clump this small is just saturated ink or a logo
+    # detail — not worth the recomposite, and it only muddies the metrics.
+    if float((m > 0.3).mean()) < 0.006:
+        return np.zeros_like(m)
+    return m * float(paper_confidence)
+
+
+def _render_colored_fills(pre_channel: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Target rendering for the _colored_fill_mask region: a local levels
+    stretch confined to the fill, so the band body lands on a consistent
+    mid-grey (~120) and its knocked-out text on ~white, regardless of how
+    bright or dim the original photo was. `pre_channel` is the L (or gray)
+    channel BEFORE illumination correction — the fill still has its real
+    contrast there."""
+    x = pre_channel.astype(np.float32)
+    h, w = x.shape
+    scale = min(1.0, 480.0 / min(h, w))
+    small = (cv2.resize(x, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+             if scale < 1.0 else x)
+    k = max(5, int(min(small.shape) * 0.05) | 1)
+    lo = cv2.morphologyEx(small, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    hi = cv2.morphologyEx(small, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    lo = cv2.GaussianBlur(lo, (0, 0), k * 0.5)
+    hi = cv2.GaussianBlur(hi, (0, 0), k * 0.5)
+    if scale < 1.0:
+        lo = cv2.resize(lo, (w, h), interpolation=cv2.INTER_LINEAR)
+        hi = cv2.resize(hi, (w, h), interpolation=cv2.INTER_LINEAR)
+    t = np.clip((x - lo) / np.maximum(hi - lo, 25.0), 0.0, 1.0)
+    return np.clip(120.0 + t * 135.0, 0.0, 255.0)
+
+
+def _protect_colored_fills(result: np.ndarray, image: np.ndarray, paper_confidence: float,
+                           allow_background_crush: bool) -> np.ndarray:
+    """Composite the _render_colored_fills target back over a finished
+    Docs/Clear result (BGR or single-channel), so the coloured bands the
+    main pipeline bleached read as clean solid fills again. No-op for a
+    confirmed non-document photo (allow_background_crush) — there a
+    'coloured region' is just as likely to be the photographic subject,
+    which _protect_subject already handles."""
+    if allow_background_crush or paper_confidence < 0.5:
+        return result
+    m = _colored_fill_mask(image, paper_confidence)
+    if float(m.max()) < 0.05:
+        return result
+    sm = cv2.bilateralFilter(image, d=5, sigmaColor=50, sigmaSpace=50)
+    if result.ndim == 2:
+        pre = cv2.cvtColor(sm, cv2.COLOR_BGR2GRAY)
+        target = _render_colored_fills(pre, m)
+        return np.clip(result.astype(np.float32) * (1 - m) + target * m, 0, 255).astype(np.uint8)
+
+    lab = cv2.cvtColor(result, cv2.COLOR_BGR2LAB).astype(np.float32)
+    orig_lab = cv2.cvtColor(sm, cv2.COLOR_BGR2LAB).astype(np.float32)
+    target = _render_colored_fills(orig_lab[..., 0], m)
+    lab[..., 0] = lab[..., 0] * (1 - m) + target * m
+    # bring back most of the band's own hue so it still reads as an
+    # orange / green bar, not a flat grey one
+    hue_keep = m * 0.7
+    lab[..., 1] = lab[..., 1] * (1 - hue_keep) + orig_lab[..., 1] * hue_keep
+    lab[..., 2] = lab[..., 2] * (1 - hue_keep) + orig_lab[..., 2] * hue_keep
+    return cv2.cvtColor(np.clip(lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+
+
 def _snap_paper_to_white(channel: np.ndarray, paper_confidence: float, mask: np.ndarray | None = None):
     """Final cleanup for a confident document: wipe everything that isn't
     real content the rest of the way to pure white, so a faint residual
@@ -504,6 +606,28 @@ def _snap_paper_to_white(channel: np.ndarray, paper_confidence: float, mask: np.
     dark = dark * dark * (3 - 2 * dark)  # smoothstep: 1 where pixel is dark (<175), 0 where bright (>215)
 
     keep = np.maximum(keep_flat, dark)
+
+    # A soft residual shade the local test above misses: when a wide crease
+    # or a scanner-bed vignette depresses a whole patch, `local` sinks with
+    # it, so `below` never grows enough to trip keep_flat — the patch just
+    # sits at 230-250 as a visible grey cloud (crumpled documents are full
+    # of these). Force any pixel that is already bright, has no text detail
+    # around it, and isn't a bright feature standing proud of its
+    # surroundings, the rest of the way to white. Real faint content has
+    # edges (so `detail` is high there) and keeps what keep_flat gave it.
+    detail = cv2.GaussianBlur(np.abs(cv2.Laplacian(ch, cv2.CV_32F, ksize=3)), (0, 0), 2.0)
+    smooth = 1.0 - np.clip(detail / 4.0, 0.0, 1.0)
+    bright = np.clip((ch - 184.0) / 50.0, 0.0, 1.0)
+    bright = bright * bright * (3 - 2 * bright)
+    # exclude a genuine bright feature standing well above its surroundings
+    # (a lit cheek in an embedded photo): a residual shade sits at or only
+    # slightly above its own depressed local level. Generous on the "above"
+    # side because next to a dark band _background_map under-reads the local
+    # paper by 20-40 and the worst haze is exactly there.
+    not_a_highlight = np.clip((45.0 - (ch - local)) / 35.0, 0.0, 1.0)
+    wipe_soft = bright * smooth * not_a_highlight
+    keep = keep * (1.0 - wipe_soft)
+
     keep = 1.0 - paper_confidence * (1.0 - keep)
     if mask is not None:
         keep = np.maximum(keep, mask.astype(np.float32) / 255.0)
@@ -569,7 +693,8 @@ def to_docs(image: np.ndarray, allow_background_crush: bool = False, recover_ink
     l = _unsharp(l, amount=1.3, sigma=1.0)
     l, a, b = _white_balance_lab(l, a, b)
     l, a, b = _snap_lab(l, a, b, confidence, mask)
-    return cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
+    out = cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
+    return _protect_colored_fills(out, image, confidence, allow_background_crush)
 
 
 def to_clear(image: np.ndarray, allow_background_crush: bool = False, recover_ink: bool = False) -> np.ndarray:
@@ -606,7 +731,9 @@ def to_clear(image: np.ndarray, allow_background_crush: bool = False, recover_in
     # can leave 1-3 levels of haze back, so snap once more.
     l, a, b = cv2.split(cv2.cvtColor(sharpened, cv2.COLOR_BGR2LAB))
     l, a, b = _snap_lab(l, a, b, confidence, mask)
-    return cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
+    out = cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
+    # to_docs' fill protection was just run over by this second push/snap
+    return _protect_colored_fills(out, image, confidence, allow_background_crush)
 
 
 def to_original_bw(image: np.ndarray) -> np.ndarray:
@@ -644,7 +771,8 @@ def to_docs_bw(image: np.ndarray, allow_background_crush: bool = False, recover_
     if mask is not None:
         gray = _darken_background(gray, mask, _BG_CRUSH_DOCS)
     gray = _unsharp(gray, amount=1.3, sigma=1.0)
-    return _snap_paper_to_white(gray, confidence, mask)[0]
+    gray = _snap_paper_to_white(gray, confidence, mask)[0]
+    return _protect_colored_fills(gray, image, confidence, allow_background_crush)
 
 
 def to_clear_bw(image: np.ndarray, allow_background_crush: bool = False, recover_ink: bool = False) -> np.ndarray:
@@ -661,7 +789,8 @@ def to_clear_bw(image: np.ndarray, allow_background_crush: bool = False, recover
     sharpened = _unsharp(gray, amount=0.6, sigma=1.0)
     if mask is not None:
         sharpened = _darken_background(sharpened, mask, _BG_CRUSH_CLEAR_EXTRA)
-    return _snap_paper_to_white(sharpened, confidence, mask)[0]
+    gray = _snap_paper_to_white(sharpened, confidence, mask)[0]
+    return _protect_colored_fills(gray, image, confidence, allow_background_crush)
 
 
 # to_bw kept as an alias — it's the strongest/flagship B&W preset and a few
