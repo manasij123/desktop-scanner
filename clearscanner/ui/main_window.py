@@ -36,6 +36,7 @@ from clearscanner._version import __version__
 from clearscanner.core import detector, filters, ocr, pdf_import
 from clearscanner.output.pdf_writer import images_to_pdf
 from clearscanner.ui import icons, theme
+from clearscanner.ui.backdrop import Backdrop
 from clearscanner.ui.batch_dialog import BatchSettingsDialog
 from clearscanner.ui.crop_editor import CropEditor
 from clearscanner.ui.ocr_dialog import OcrResultDialog
@@ -225,7 +226,7 @@ class MainWindow(QMainWindow):
         root.addWidget(rail)
         root.addLayout(main_col, stretch=1)
 
-        container = QWidget()
+        container = Backdrop()
         container.setLayout(root)
         self.setCentralWidget(container)
         self.setStatusBar(QStatusBar())
@@ -237,7 +238,7 @@ class MainWindow(QMainWindow):
         rail.setFixedWidth(66)
 
         logo = QLabel()
-        logo.setPixmap(icons.icon("scan", theme.ACCENT, px=52).pixmap(24, 24))
+        logo.setPixmap(icons.icon("scan", "#FFFFFF", px=52).pixmap(24, 24))
         logo.setObjectName("railLogo")
         logo.setAlignment(Qt.AlignCenter)
         logo.setFixedSize(44, 44)
@@ -251,7 +252,7 @@ class MainWindow(QMainWindow):
 
         info_btn = QPushButton()
         theme.set_kind(info_btn, "rail")
-        info_btn.setIcon(icons.icon("info", theme.MUTED, px=44))
+        info_btn.setIcon(icons.icon("info", "#FFFFFF", px=44))
         info_btn.setIconSize(icons.size(18))
         info_btn.setToolTip("About Desktop Scanner")
         info_btn.clicked.connect(self._on_about)

@@ -45,3 +45,8 @@ IMG-*.jpg
 DESKTOPSCANNER.png
 DESKTOP ANIMATION.gif
 new.txt
+
+# local UI render harness
+_uitest.py
+images.jpg
+images (*).jpg
