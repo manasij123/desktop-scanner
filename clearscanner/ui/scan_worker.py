@@ -54,17 +54,21 @@ class FilterWorker(QThread):
     resultReady = Signal(object)  # processed ndarray (BGR or grayscale)
     errorOccurred = Signal(str)
 
-    def __init__(self, image, mode: str, bw: bool, allow_background_crush: bool = False, parent=None):
+    def __init__(self, image, mode: str, bw: bool, allow_background_crush: bool = False,
+                 recover_ink: bool = False, parent=None):
         super().__init__(parent)
         self._image = image
         self._mode = mode
         self._bw = bw
         self._allow_background_crush = allow_background_crush
+        self._recover_ink = recover_ink
 
     def run(self):
         try:
             processed = filters.apply_filter(
-                self._image, self._mode, bw=self._bw, allow_background_crush=self._allow_background_crush
+                self._image, self._mode, bw=self._bw,
+                allow_background_crush=self._allow_background_crush,
+                recover_ink=self._recover_ink,
             )
         except Exception as exc:
             self.errorOccurred.emit(str(exc))

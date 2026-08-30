@@ -402,6 +402,14 @@ class MainWindow(QMainWindow):
         self._hd_btn.setToolTip("Reconstruct crisp text from a slightly soft photo (takes a few seconds)")
         self._hd_btn.toggled.connect(self._on_hd_toggled)
 
+        self._recover_btn = side_btn("Recover faded text", "text")
+        self._recover_btn.setCheckable(True)
+        self._recover_btn.setToolTip(
+            "Re-ink strokes a glare or bright light washed out — real ink only, "
+            "not show-through from the back of the page (Docs / Clear styles)"
+        )
+        self._recover_btn.toggled.connect(self._on_recover_toggled)
+
         self._ocr_lang_combo = QComboBox()
         self._ocr_lang_combo.addItems(ocr.LANGUAGES.keys())
         self._ocr_lang_combo.setCurrentText("English + Bengali")
@@ -433,6 +441,7 @@ class MainWindow(QMainWindow):
         cl.addWidget(_hairline())
         cl.addWidget(self._recrop_btn)
         cl.addWidget(self._hd_btn)
+        cl.addWidget(self._recover_btn)
         cl.addWidget(self._enhance_btn)
         cl.addWidget(self._enhance_panel)
         cl.addWidget(_hairline())
@@ -735,6 +744,7 @@ class MainWindow(QMainWindow):
         self._recrop_btn.setEnabled(True)
         self._hd_btn.setVisible(_upscale_available())
         self._hd_btn.setEnabled(True)
+        self._sync_recover_btn()
         self._on_reset_enhance()  # a new source image starts with neutral Enhance
         self._animate_to_page(1)
         self.statusBar().showMessage("Cropped.", 3000)
@@ -795,6 +805,22 @@ class MainWindow(QMainWindow):
         self.statusBar().clearMessage()
         QMessageBox.warning(self, "HD detail failed", message)
 
+    def _on_recover_toggled(self, _checked: bool):
+        if self._warped_image is not None:
+            self._apply_filter()
+
+    def _sync_recover_btn(self):
+        """Faded-text recovery only has an effect on the Docs / Clear
+        styles (they're the ones with the illumination-corrected channel it
+        works on) — grey it out elsewhere so the toggle isn't a no-op."""
+        active = self._filter_tabs.current() in ("docs", "clear")
+        self._recover_btn.setEnabled(active)
+        self._recover_btn.setToolTip(
+            "Re-ink strokes a glare or bright light washed out — real ink only, "
+            "not show-through from the back of the page (Docs / Clear styles)"
+            if active else "Switch to the Docs or Clear style to recover faded text"
+        )
+
     def _on_recrop(self):
         self._animate_to_page(0)
 
@@ -805,6 +831,7 @@ class MainWindow(QMainWindow):
     # ---- Filter + preview -----------------------------------------------
 
     def _on_filter_changed(self, _mode):
+        self._sync_recover_btn()
         if self._warped_image is not None:
             self._apply_filter()
 
@@ -839,7 +866,11 @@ class MainWindow(QMainWindow):
         self._ring_caption.setText("WORKING")
         self._status_ring.set_spinning(True)
 
-        worker = FilterWorker(self._filter_source(), mode, bw, allow_background_crush=self._detection_fallback_used)
+        worker = FilterWorker(
+            self._filter_source(), mode, bw,
+            allow_background_crush=self._detection_fallback_used,
+            recover_ink=self._recover_btn.isChecked() and mode in ("docs", "clear"),
+        )
         worker.resultReady.connect(lambda processed, rid=request_id: self._on_filter_applied(processed, rid))
         worker.errorOccurred.connect(self._on_worker_failed)
         self._filter_worker = worker
@@ -1061,6 +1092,7 @@ class MainWindow(QMainWindow):
         self._hd_btn.setVisible(False)  # HD is baked into the stored page source
         self._filter_tabs.setEnabled(True)
         self._bw_toggle.setEnabled(True)
+        self._sync_recover_btn()
         self.statusBar().showMessage(f"Viewing page {index + 1} — pick a filter to update it.", 4000)
 
     def _on_export_pdf(self):

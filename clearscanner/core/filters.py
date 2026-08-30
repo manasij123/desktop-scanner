@@ -272,6 +272,76 @@ def _whiten_highlights(channel: np.ndarray, blend_start: int = 200, white_point:
     return np.clip(x + t * (255 - x), 0, 255).astype(np.uint8)
 
 
+def _recover_faint_ink(channel: np.ndarray, strength: float = 1.0,
+                       reference: np.ndarray | None = None) -> np.ndarray:
+    """Re-ink real strokes that a bright light / reflection washed out to
+    near-white, WITHOUT re-inking show-through from the far side of the
+    page. Runs on an already illumination-corrected L (or gray) channel,
+    before the highlight/shadow push; `reference` is that channel BEFORE
+    illumination correction (used to locate the glare).
+
+    A pixel's `deficit` = how much darker it is than its own local paper
+    level (a big morphological close). Confident ink is `deficit` far
+    below paper; a faint mark (small `deficit`) is the ambiguous case:
+    faded ink under glare, or bleed-through. Three gates separate them,
+    and a mark has to pass all three:
+
+    1. It sits in a bright-light region. The whole reason a real stroke
+       goes pale is a reflection near clipping; `reference`'s local paper
+       level still shows where that fell. Ordinary paper, shadow, and
+       (critically) back-page show-through on normally-lit paper are all
+       outside it, so they're left alone.
+    2. It belongs to a stroke that is confidently dark somewhere. A faded
+       stroke crossing a glare patch is one connected mark with solid
+       ends; an isolated show-through blob contains no confident ink and
+       is dropped whole.
+    3. Its edges are crisp. A real pen/print stroke keeps sharp edges
+       even when pale; show-through has diffused through the fibres and
+       is soft. High local Laplacian energy => ink.
+
+    Everything else (paper, show-through, photographic midtones) is left
+    for the normal pipeline.
+    """
+    if strength <= 0:
+        return channel
+    x = channel.astype(np.float32)
+    local_paper = _background_map(channel).astype(np.float32)
+    deficit = np.clip(local_paper - x, 0.0, None)
+
+    confident_ink = (deficit > 50.0).astype(np.uint8)
+    faint_band = (deficit > 7.0) & (deficit <= 50.0)
+
+    # --- Gate 1: bright-light / glare region only ----------------------
+    if reference is not None:
+        ref_paper = _background_map(np.clip(reference, 0, 255).astype(np.uint8)).astype(np.float32)
+        glare = np.clip((ref_paper - 220.0) / 22.0, 0.0, 1.0)
+        if float(glare.max()) < 0.05:
+            return channel  # nothing bright enough to be a washed-out reflection
+    else:
+        glare = np.ones_like(x)
+
+    # --- Gate 2: connected to confident ink --------------------------
+    mark = cv2.morphologyEx((deficit > 8.0).astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    _, labels = cv2.connectedComponents(mark, connectivity=8)
+    keep = np.unique(labels[confident_ink.astype(bool)])
+    keep = keep[keep != 0]
+    linked = np.isin(labels, keep).astype(np.float32)
+
+    # --- Gate 3: crisp edges ----------------------------------------
+    lap = np.abs(cv2.Laplacian(x, cv2.CV_32F, ksize=3))
+    edge = cv2.GaussianBlur(lap, (0, 0), 1.4)
+    edge_conf = np.clip((edge - 3.0) / 10.0, 0.0, 1.0)
+
+    weight = faint_band.astype(np.float32) * linked * glare * (0.4 + 0.6 * edge_conf)
+    weight = cv2.GaussianBlur(weight, (0, 0), 0.8)
+
+    # ramp the shove in with deficit: a marginally-faint pixel barely
+    # moves; a clearly-faded stroke gets pushed solidly into ink range
+    ramp = np.clip((deficit - 7.0) / 12.0, 0.0, 1.0)
+    pull = weight * ramp * strength * (deficit * 1.05 + 30.0)
+    return np.clip(x - pull, 0.0, 255.0).astype(np.uint8)
+
+
 def _darken_shadows(channel: np.ndarray, blend_start: int = 90, black_point: int = 40) -> np.ndarray:
     """Mirror of _whiten_highlights for the low end: push already-dark
     pixels (ink) the rest of the way toward pure black, smoothly, leaving
@@ -450,7 +520,7 @@ def _snap_lab(l: np.ndarray, a: np.ndarray, b: np.ndarray, paper_confidence: flo
     return l, a, b
 
 
-def to_docs(image: np.ndarray, allow_background_crush: bool = False) -> np.ndarray:
+def to_docs(image: np.ndarray, allow_background_crush: bool = False, recover_ink: bool = False) -> np.ndarray:
     """Document-optimized but still color: shadow-flattening AND color-cast
     removal, so the background actually reads as clean white rather than
     a brighter version of whatever tint the ambient light left on it, plus
@@ -484,6 +554,8 @@ def to_docs(image: np.ndarray, allow_background_crush: bool = False) -> np.ndarr
     mask = _subject_mask_for_crush(image) if allow_background_crush else None
     if mask is not None:
         l = _protect_subject(l, pre_correction_l, mask)
+    if recover_ink:
+        l = _recover_faint_ink(l, strength=confidence, reference=pre_correction_l)
     l = cv2.createCLAHE(clipLimit=_CLAHE_CLIP_LIMIT, tileGridSize=(8, 8)).apply(l)
     # Same paper_confidence blend as _correct_illumination above, applied
     # to the highlight/shadow push too — on the systematic color-chart
@@ -500,7 +572,7 @@ def to_docs(image: np.ndarray, allow_background_crush: bool = False) -> np.ndarr
     return cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
 
 
-def to_clear(image: np.ndarray, allow_background_crush: bool = False) -> np.ndarray:
+def to_clear(image: np.ndarray, allow_background_crush: bool = False, recover_ink: bool = False) -> np.ndarray:
     """The flagship default: Docs processing, pushed further — Clear should
     read even crisper than Docs, not just a same-strength restyle, and
     (for a confirmed non-document photo) with its background crushed
@@ -513,7 +585,7 @@ def to_clear(image: np.ndarray, allow_background_crush: bool = False) -> np.ndar
     miss difference at normal preview size; toggling Docs/Clear needs to be
     obviously different on sight, the way a real scanner app's is."""
     confidence = _paper_confidence(image)
-    docs = to_docs(image, allow_background_crush)
+    docs = to_docs(image, allow_background_crush, recover_ink)
     lab = cv2.cvtColor(docs, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
     pre_push_l = l
@@ -550,7 +622,7 @@ def to_photo_bw(image: np.ndarray) -> np.ndarray:
     return cv2.createCLAHE(clipLimit=_CLAHE_CLIP_LIMIT, tileGridSize=(8, 8)).apply(gray)
 
 
-def to_docs_bw(image: np.ndarray, allow_background_crush: bool = False) -> np.ndarray:
+def to_docs_bw(image: np.ndarray, allow_background_crush: bool = False, recover_ink: bool = False) -> np.ndarray:
     """Docs, but monochrome: shadow-flattened, highlight/shadow contrast
     pushed, and unsharped — crisp printed-page look, same as color Docs.
     See to_docs's allow_background_crush note — only set this for a
@@ -563,6 +635,8 @@ def to_docs_bw(image: np.ndarray, allow_background_crush: bool = False) -> np.nd
     mask = _subject_mask_for_crush(image) if allow_background_crush else None
     if mask is not None:
         gray = _protect_subject(gray, pre_correction_gray, mask)
+    if recover_ink:
+        gray = _recover_faint_ink(gray, strength=confidence, reference=pre_correction_gray)
     gray = cv2.createCLAHE(clipLimit=_CLAHE_CLIP_LIMIT, tileGridSize=(8, 8)).apply(gray)
     pushed = _darken_shadows(_whiten_highlights(gray))
     gray = np.clip(gray.astype(np.float32) * (1 - confidence) + pushed.astype(np.float32) * confidence,
@@ -573,11 +647,11 @@ def to_docs_bw(image: np.ndarray, allow_background_crush: bool = False) -> np.nd
     return _snap_paper_to_white(gray, confidence, mask)[0]
 
 
-def to_clear_bw(image: np.ndarray, allow_background_crush: bool = False) -> np.ndarray:
+def to_clear_bw(image: np.ndarray, allow_background_crush: bool = False, recover_ink: bool = False) -> np.ndarray:
     """The flagship B&W: Docs pushed further still — mirrors to_clear,
     including its second, wider-band tonal push (see to_clear)."""
     confidence = _paper_confidence(image)
-    docs = to_docs_bw(image, allow_background_crush)
+    docs = to_docs_bw(image, allow_background_crush, recover_ink)
     pushed = _darken_shadows(_whiten_highlights(docs, blend_start=188, white_point=238), blend_start=105, black_point=52)
     gray = np.clip(docs.astype(np.float32) * (1 - confidence) + pushed.astype(np.float32) * confidence,
                     0, 255).astype(np.uint8)
@@ -632,18 +706,19 @@ _HANDLERS = {
 
 
 def apply_filter(
-    image: np.ndarray, mode: str = "clear", bw: bool = False, allow_background_crush: bool = False
+    image: np.ndarray, mode: str = "clear", bw: bool = False,
+    allow_background_crush: bool = False, recover_ink: bool = False
 ) -> np.ndarray:
     """Apply `mode` (see COLOR_MODES) in color, or its matching B&W
     rendering if `bw` is True — every mode has both (see module docstring).
 
-    allow_background_crush only affects docs/clear (see to_docs) — pass it
-    through as-is for those; Original/Photo have no such step, so it's
-    simply ignored for them rather than raising.
+    allow_background_crush and recover_ink only affect docs/clear (see
+    to_docs) — pass them through as-is for those; Original/Photo have no
+    such step, so they're simply ignored for them rather than raising.
     """
     handler = _HANDLERS.get((mode, bw))
     if handler is None:
         raise ValueError(f"Unknown filter mode: {mode!r} (expected one of {COLOR_MODES})")
     if mode in ("docs", "clear"):
-        return handler(image, allow_background_crush)
+        return handler(image, allow_background_crush, recover_ink)
     return handler(image)
