@@ -24,7 +24,9 @@ benchmark/cases/
 benchmark/results/
 
 # --- ML model cache (rembg / u2netp weights, downloaded at runtime) ---
+# rembg's model cache (downloaded at runtime), but NOT the bundled HD model
 *.onnx
+!clearscanner/assets/models/*.onnx
 
 # --- OS / editor cruft ---
 .DS_Store

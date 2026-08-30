@@ -70,3 +70,25 @@ class FilterWorker(QThread):
             self.errorOccurred.emit(str(exc))
             return
         self.resultReady.emit(processed)
+
+
+class HdWorker(QThread):
+    """Real-ESRGAN detail enhancement of a warped page — several seconds on
+    CPU, so it reports progress and runs off the UI thread."""
+    progress = Signal(float)     # 0.0 - 1.0
+    resultReady = Signal(object)  # enhanced BGR ndarray
+    errorOccurred = Signal(str)
+
+    def __init__(self, image, parent=None):
+        super().__init__(parent)
+        self._image = image
+
+    def run(self):
+        try:
+            from clearscanner.core import upscale
+
+            out = upscale.enhance(self._image, progress=self.progress.emit)
+        except Exception as exc:
+            self.errorOccurred.emit(str(exc))
+            return
+        self.resultReady.emit(out)

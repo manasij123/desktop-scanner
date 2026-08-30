@@ -43,7 +43,7 @@ from clearscanner.ui.ocr_dialog import OcrResultDialog
 from clearscanner.ui.ocr_worker import OcrWorker
 from clearscanner.ui.page_list import PageList
 from clearscanner.ui.qt_image import to_pixmap
-from clearscanner.ui.scan_worker import DetectWorker, FilterWorker, WarpWorker
+from clearscanner.ui.scan_worker import DetectWorker, FilterWorker, HdWorker, WarpWorker
 from clearscanner.ui.segmented_control import SegmentedControl
 from clearscanner.ui.toggle_switch import ToggleSwitch
 from clearscanner.ui.update_worker import UpdateCheckWorker, UpdateDownloadWorker
@@ -53,6 +53,12 @@ OPEN_FILTER = "Images and PDFs (*.png *.jpg *.jpeg *.bmp *.pdf)"
 SAVE_FILTER = "JPEG (*.jpg);;PNG (*.png)"
 PDF_FILTER = "PDF (*.pdf)"
 DESKTOP_DIR = os.path.join(os.path.expanduser("~"), "Desktop")
+
+
+def _upscale_available() -> bool:
+    from clearscanner.core import upscale
+
+    return upscale.is_available()
 
 
 def _card(inner: QWidget, margin: int = 10, shadow: bool = True, glass: bool = False) -> QFrame:
@@ -109,6 +115,9 @@ class MainWindow(QMainWindow):
         # otherwise.
         self._detection_fallback_used = False
         self._warped_image = None  # BGR ndarray, post-warp / pre-filter
+        self._hd_image = None  # Real-ESRGAN-enhanced _warped_image, once computed
+        self._hd_worker = None
+        self._hd_request_id = 0
         self._base_processed_image = None  # filter output, before Enhance sliders
         self._processed_image = None  # base + Enhance sliders applied — ready to save
         self._viewing_page_index = None  # set while re-filtering an already-added page
@@ -387,6 +396,12 @@ class MainWindow(QMainWindow):
         self._enhance_btn.setCheckable(True)
         self._enhance_btn.toggled.connect(self._on_enhance_toggled)
 
+        self._hd_btn = side_btn("HD detail", "scan")
+        self._hd_btn.setCheckable(True)
+        self._hd_btn.setVisible(False)
+        self._hd_btn.setToolTip("Reconstruct crisp text from a slightly soft photo (takes a few seconds)")
+        self._hd_btn.toggled.connect(self._on_hd_toggled)
+
         self._ocr_lang_combo = QComboBox()
         self._ocr_lang_combo.addItems(ocr.LANGUAGES.keys())
         self._ocr_lang_combo.setCurrentText("English + Bengali")
@@ -417,6 +432,7 @@ class MainWindow(QMainWindow):
         cl.addSpacing(2)
         cl.addWidget(_hairline())
         cl.addWidget(self._recrop_btn)
+        cl.addWidget(self._hd_btn)
         cl.addWidget(self._enhance_btn)
         cl.addWidget(self._enhance_panel)
         cl.addWidget(_hairline())
@@ -711,14 +727,73 @@ class MainWindow(QMainWindow):
 
     def _on_warp_finished(self, warped):
         self._warped_image = warped
+        self._hd_image = None  # the new crop invalidates any cached HD result
+        self._hd_request_id += 1
         self._viewing_page_index = None  # a fresh crop, not re-filtering an existing page
         self._filter_tabs.setEnabled(True)
         self._bw_toggle.setEnabled(True)
         self._recrop_btn.setEnabled(True)
+        self._hd_btn.setVisible(_upscale_available())
+        self._hd_btn.setEnabled(True)
         self._on_reset_enhance()  # a new source image starts with neutral Enhance
         self._animate_to_page(1)
         self.statusBar().showMessage("Cropped.", 3000)
+        if self._hd_btn.isChecked():
+            self._start_hd()  # keep HD on across crops — re-enhance the new page
+        else:
+            self._apply_filter()
+
+    # ---- HD (super-resolution) -----------------------------------------
+
+    def _filter_source(self):
+        """The image the filter presets run on — the HD-enhanced copy when
+        the toggle is on and ready, else the plain warp."""
+        if self._hd_btn.isChecked() and self._hd_image is not None:
+            return self._hd_image
+        return self._warped_image
+
+    def _on_hd_toggled(self, checked: bool):
+        if self._warped_image is None:
+            return
+        if checked and self._hd_image is None:
+            self._start_hd()
+        else:
+            self._apply_filter()  # cached HD result, or reverting to the plain warp
+
+    def _start_hd(self):
+        self._hd_request_id += 1
+        rid = self._hd_request_id
+        self._hd_btn.setEnabled(False)
+        self._ring_wrap.setVisible(True)
+        self._ring_caption.setText("HD")
+        self._status_ring.set_value(0.02, "")
+        self.statusBar().showMessage("Reconstructing detail...")
+
+        worker = HdWorker(self._warped_image)
+        worker.progress.connect(lambda f: self._status_ring.set_value(max(0.02, f)))
+        worker.resultReady.connect(lambda img, r=rid: self._on_hd_ready(img, r))
+        worker.errorOccurred.connect(self._on_hd_failed)
+        self._hd_worker = worker
+        self._track_worker(worker)
+        worker.start()
+
+    def _on_hd_ready(self, image, request_id: int):
+        if request_id != self._hd_request_id:
+            return  # a newer crop / toggle superseded this run
+        self._hd_image = image
+        self._hd_btn.setEnabled(True)
+        self.statusBar().showMessage("Detail enhanced.", 3000)
+        self._sync_pages_ring()
         self._apply_filter()
+
+    def _on_hd_failed(self, message: str):
+        self._hd_btn.setEnabled(True)
+        self._hd_btn.blockSignals(True)
+        self._hd_btn.setChecked(False)
+        self._hd_btn.blockSignals(False)
+        self._sync_pages_ring()
+        self.statusBar().clearMessage()
+        QMessageBox.warning(self, "HD detail failed", message)
 
     def _on_recrop(self):
         self._animate_to_page(0)
@@ -764,7 +839,7 @@ class MainWindow(QMainWindow):
         self._ring_caption.setText("WORKING")
         self._status_ring.set_spinning(True)
 
-        worker = FilterWorker(self._warped_image, mode, bw, allow_background_crush=self._detection_fallback_used)
+        worker = FilterWorker(self._filter_source(), mode, bw, allow_background_crush=self._detection_fallback_used)
         worker.resultReady.connect(lambda processed, rid=request_id: self._on_filter_applied(processed, rid))
         worker.errorOccurred.connect(self._on_worker_failed)
         self._filter_worker = worker
@@ -916,7 +991,11 @@ class MainWindow(QMainWindow):
     def _on_add_to_document(self):
         if self._processed_image is None:
             return
-        self._page_list.add_page(self._processed_image, self._warped_image, self._detection_fallback_used)
+        # store the HD-enhanced source when it's active, so re-filtering this
+        # page later keeps the extra detail.
+        self._page_list.add_page(
+            self._processed_image, self._filter_source(), self._detection_fallback_used
+        )
         was_batch = self._batch_total > 1
 
         if self._pending_images:
@@ -968,6 +1047,7 @@ class MainWindow(QMainWindow):
         self._base_processed_image = pages[index]
         self._processed_image = pages[index]
         self._warped_image = self._page_list.warped_page(index)
+        self._hd_image = None  # the stored source already bakes in whatever HD state it had
         self._detection_fallback_used = self._page_list.fallback_used_for_page(index)
         self._on_reset_enhance()  # viewing a different page starts a fresh Enhance session
         self._show_preview(self._processed_image)
@@ -978,6 +1058,7 @@ class MainWindow(QMainWindow):
         # per page, so that one stays unsupported for existing pages.
         self._add_page_btn.setEnabled(False)
         self._recrop_btn.setEnabled(False)
+        self._hd_btn.setVisible(False)  # HD is baked into the stored page source
         self._filter_tabs.setEnabled(True)
         self._bw_toggle.setEnabled(True)
         self.statusBar().showMessage(f"Viewing page {index + 1} — pick a filter to update it.", 4000)
