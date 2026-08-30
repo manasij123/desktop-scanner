@@ -134,6 +134,27 @@ def _paper_confidence(image: np.ndarray, low_frac: float = 0.15, high_frac: floa
     return float(t * t * (3 - 2 * t))  # smoothstep
 
 
+def _paper_level_map(channel: np.ndarray) -> np.ndarray:
+    """The local paper level — a blurred local maximum on a downscaled
+    copy. Where _background_map (a morphological close) tracks the shading
+    including large dark regions at their own level, this tracks only the
+    brightest tone around, i.e. what a pixel would read if it were clean
+    paper. Used by _correct_illumination so a bright strip hemmed in by
+    darker features still divides out to white. Kernel a touch wider than
+    _background_map's so it reliably spans a letterhead band."""
+    h, w = channel.shape
+    scale = min(1.0, _ILLUM_ESTIMATE_SIZE / min(h, w))
+    small = (cv2.resize(channel, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+             if scale < 1.0 else channel)
+    k = max(15, int(min(small.shape) * 0.11) | 1)
+    est = cv2.dilate(small, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    # a small erode back keeps a lone bright speck from dragging a whole
+    # neighbourhood up; the estimate stays a smooth low-frequency signal
+    est = cv2.erode(est, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (max(3, k // 4) | 1,) * 2))
+    est = cv2.GaussianBlur(est, (0, 0), k * 0.35)
+    return cv2.resize(est, (w, h), interpolation=cv2.INTER_LINEAR) if scale < 1.0 else est
+
+
 def _correct_illumination(
     channel: np.ndarray, blend_low: int = 90, blend_high: int = 160, paper_confidence: float = 1.0
 ) -> np.ndarray:
@@ -167,8 +188,23 @@ def _correct_illumination(
     doorway behind the subjects in a non-document photo that still scored
     high paper_confidence off its bright wall) stays protected from being
     blown open.
+
+    The background estimate is the brighter of two: a morphological close
+    (fills dark strokes, tracks the shading) and a blurred local *maximum*
+    (the true paper level — the brightest thing in a wide neighbourhood).
+    The close alone under-reads wherever bright content is trapped between
+    darker features — the thin paper strip between an ID card's top edge
+    and its first coloured band, say — so that strip only half-corrected
+    and stayed a grey smear. Dividing by the local-max paper level instead
+    maps paper there to white while keeping darker content dark (the ratio
+    is preserved), which is what a real scanner app's flat output needs.
+    The per-pixel brightness gate reads this same brightened estimate, so
+    the correction actually reaches full strength on that trapped strip;
+    the paper_confidence factor is what still spares a non-document frame.
     """
-    background = _background_map(channel)
+    close_est = _background_map(channel)
+    dilate_est = _paper_level_map(channel)
+    background = np.maximum(close_est, dilate_est)
     corrected = cv2.divide(channel, background, scale=255)
 
     full_page = np.clip((paper_confidence - 0.8) / 0.2, 0.0, 1.0)
