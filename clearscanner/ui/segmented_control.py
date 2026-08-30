@@ -1,6 +1,13 @@
-"""Horizontal tab-style selector (e.g. Color / Grayscale / B&W), used in
-place of a QComboBox where the choice deserves to be visible at a glance."""
-from PySide6.QtWidgets import QButtonGroup, QFrame, QHBoxLayout, QPushButton, QSizePolicy
+"""Tab-style selector (e.g. Original / Photo / Docs / Clear) — horizontal
+by default, or a vertical stack for a side panel."""
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QFrame,
+    QHBoxLayout,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+)
 
 from clearscanner.ui import theme
 
@@ -11,27 +18,33 @@ LABELS = {
 
 
 class SegmentedControl(QFrame):
-    def __init__(self, options, on_change=None, default=None, parent=None):
+    def __init__(self, options, on_change=None, default=None, vertical=False, parent=None):
         super().__init__(parent)
         self.setObjectName("tabBar")
         self._on_change = on_change
         self._buttons = {}
 
-        layout = QHBoxLayout(self)
+        layout = (QVBoxLayout if vertical else QHBoxLayout)(self)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)
+        layout.setSpacing(3)
+        n = len(list(options))
 
         self._group = QButtonGroup(self)
         self._group.setExclusive(True)
         for option in options:
             btn = QPushButton(LABELS.get(option, option.title()))
             btn.setCheckable(True)
-            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            btn.setFixedHeight(34 if vertical else btn.sizeHint().height())
             theme.set_kind(btn, "tab")
             btn.clicked.connect(lambda _checked, o=option: self._select(o))
             layout.addWidget(btn)
             self._group.addButton(btn)
             self._buttons[option] = btn
+
+        if vertical:
+            self.setFixedHeight(34 * n + 3 * (n - 1) + 8)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
 
         selected = self._buttons.get(default) or next(iter(self._buttons.values()), None)
         if selected is not None:

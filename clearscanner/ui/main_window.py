@@ -362,37 +362,29 @@ class MainWindow(QMainWindow):
         self._preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self._filter_tabs = SegmentedControl(
-            filters.COLOR_MODES, on_change=self._on_filter_changed, default="clear"
+            filters.COLOR_MODES, on_change=self._on_filter_changed, default="clear", vertical=True
         )
-        self._filter_tabs.setMaximumWidth(400)
 
         self._bw_toggle = ToggleSwitch("Colour", "B&W")
         self._bw_toggle.toggled.connect(self._on_bw_changed)
 
-        style_row = QHBoxLayout()
-        style_row.setSpacing(12)
-        style_row.addWidget(_section_label("Scan style"))
-        style_row.addSpacing(2)
-        style_row.addWidget(self._filter_tabs)
-        style_row.addStretch()
-        style_row.addWidget(_section_label("Colour"))
-        style_row.addWidget(self._bw_toggle)
-
         self._enhance_panel = self._build_enhance_panel()
         self._enhance_panel.setVisible(False)
 
-        # ---- action row ----
-        self._recrop_btn = QPushButton("  Re-crop")
-        theme.set_kind(self._recrop_btn, "ghost")
-        self._recrop_btn.setIcon(icons.icon("crop", theme.INK_SOFT, px=44))
-        self._recrop_btn.setIconSize(icons.size(15))
-        self._recrop_btn.clicked.connect(self._on_recrop)
+        # ---- buttons ----
+        def side_btn(label, ic, cb=None, primary=False):
+            b = QPushButton("  " + label)
+            theme.set_kind(b, "primary" if primary else "ghost")
+            b.setIcon(icons.icon(ic, "#FFFFFF" if primary else theme.INK_SOFT, px=44))
+            b.setIconSize(icons.size(15))
+            if cb is not None:
+                b.clicked.connect(cb)
+            b.setMinimumHeight(36)
+            return b
 
-        self._enhance_btn = QPushButton("  Adjust")
+        self._recrop_btn = side_btn("Re-crop", "crop", self._on_recrop)
+        self._enhance_btn = side_btn("Adjust", "sliders")
         self._enhance_btn.setCheckable(True)
-        theme.set_kind(self._enhance_btn, "ghost")
-        self._enhance_btn.setIcon(icons.icon("sliders", theme.INK_SOFT, px=44))
-        self._enhance_btn.setIconSize(icons.size(15))
         self._enhance_btn.toggled.connect(self._on_enhance_toggled)
 
         self._ocr_lang_combo = QComboBox()
@@ -400,64 +392,63 @@ class MainWindow(QMainWindow):
         self._ocr_lang_combo.setCurrentText("English + Bengali")
         self._ocr_lang_combo.setToolTip("OCR language")
 
-        self._ocr_btn = QPushButton("  Extract text")
-        theme.set_kind(self._ocr_btn, "ghost")
-        self._ocr_btn.setIcon(icons.icon("text", theme.INK_SOFT, px=44))
-        self._ocr_btn.setIconSize(icons.size(15))
-        self._ocr_btn.clicked.connect(self._on_extract_text)
+        self._ocr_btn = side_btn("Extract text", "text", self._on_extract_text)
         self._ocr_btn.setEnabled(False)
 
-        self._save_btn = QPushButton("Save copy")
-        self._save_btn.clicked.connect(self._on_save)
+        self._save_btn = side_btn("Save copy", "download", self._on_save)
         self._save_btn.setEnabled(False)
 
-        self._add_page_btn = QPushButton("  Add to document")
-        theme.set_kind(self._add_page_btn, "primary")
-        self._add_page_btn.setIcon(icons.icon("plus", "#FFFFFF", px=44))
-        self._add_page_btn.setIconSize(icons.size(15))
-        self._add_page_btn.clicked.connect(self._on_add_to_document)
+        self._add_page_btn = side_btn("Add to document", "plus", self._on_add_to_document, primary=True)
         self._add_page_btn.setEnabled(False)
         theme.apply_glow(self._add_page_btn)
 
-        action_row = QHBoxLayout()
-        action_row.setSpacing(8)
-        action_row.addWidget(self._recrop_btn)
-        action_row.addWidget(self._enhance_btn)
-        action_row.addSpacing(6)
-        action_row.addWidget(self._ocr_lang_combo)
-        action_row.addWidget(self._ocr_btn)
-        action_row.addStretch()
-        action_row.addWidget(self._save_btn)
-        action_row.addWidget(self._add_page_btn)
+        # ---- right-hand controls panel (vertical, so the preview keeps the
+        #      full window height — no scrolling to see the page). The panel
+        #      itself scrolls internally on a short window. ----
+        inner = QWidget()
+        cl = QVBoxLayout(inner)
+        cl.setContentsMargins(14, 14, 14, 14)
+        cl.setSpacing(9)
+        cl.addWidget(_section_label("Scan style"))
+        cl.addWidget(self._filter_tabs)
+        cl.addSpacing(4)
+        cl.addWidget(_section_label("Colour"))
+        cl.addWidget(self._bw_toggle)
+        cl.addSpacing(2)
+        cl.addWidget(_hairline())
+        cl.addWidget(self._recrop_btn)
+        cl.addWidget(self._enhance_btn)
+        cl.addWidget(self._enhance_panel)
+        cl.addWidget(_hairline())
+        cl.addWidget(_section_label("Text (OCR)"))
+        cl.addWidget(self._ocr_lang_combo)
+        cl.addWidget(self._ocr_btn)
+        cl.addStretch()
+        cl.addWidget(self._save_btn)
+        cl.addWidget(self._add_page_btn)
+
+        panel_scroll = QScrollArea()
+        panel_scroll.setWidgetResizable(True)
+        panel_scroll.setFrameShape(QFrame.NoFrame)
+        panel_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        panel_scroll.setWidget(inner)
 
         controls = QFrame()
         controls.setObjectName("glassCard")
-        cl = QVBoxLayout(controls)
-        cl.setContentsMargins(16, 14, 16, 14)
-        cl.setSpacing(12)
-        cl.addLayout(style_row)
-        cl.addWidget(self._enhance_panel)
-        cl.addWidget(_hairline())
-        cl.addLayout(action_row)
+        controls.setFixedWidth(238)
+        cw = QVBoxLayout(controls)
+        cw.setContentsMargins(0, 0, 0, 0)
+        cw.addWidget(panel_scroll)
 
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(14)
-        layout.addWidget(_card(self._preview, margin=8), stretch=1)
-        layout.addWidget(controls)
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(16)
+        row.addWidget(_card(self._preview, margin=8), stretch=1)
+        row.addWidget(controls)
 
         page = QWidget()
-        page.setLayout(layout)
-
-        # QScrollArea guards the over-constrained case: preview has a hard
-        # minimum and the Adjust panel adds height when open — on a short
-        # window a scrollbar reaches what doesn't fit rather than the
-        # preview overflowing its card.
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setWidget(page)
-        return scroll
+        page.setLayout(row)
+        return page
 
     def _build_enhance_panel(self) -> QWidget:
         """Brightness / Contrast / Saturation touch-up sliders, layered on
@@ -467,11 +458,13 @@ class MainWindow(QMainWindow):
         panel = QFrame()
         panel.setObjectName("innerPanel")
 
+        reset_btn = _icon_button("reset", "Reset adjustments")
+        reset_btn.setFixedSize(28, 28)
+        reset_btn.setIconSize(icons.size(14))
+        reset_btn.clicked.connect(self._on_reset_enhance)
         header = QHBoxLayout()
         header.addWidget(_section_label("Fine adjust"))
         header.addStretch()
-        reset_btn = _icon_button("reset", "Reset adjustments")
-        reset_btn.clicked.connect(self._on_reset_enhance)
         header.addWidget(reset_btn)
 
         self._brightness_slider, brightness_row = self._make_enhance_slider("Brightness")
@@ -479,8 +472,8 @@ class MainWindow(QMainWindow):
         self._saturation_slider, self._saturation_row = self._make_enhance_slider("Saturation")
 
         outer = QVBoxLayout(panel)
-        outer.setContentsMargins(14, 12, 14, 14)
-        outer.setSpacing(9)
+        outer.setContentsMargins(12, 10, 12, 12)
+        outer.setSpacing(7)
         outer.addLayout(header)
         outer.addWidget(brightness_row)
         outer.addWidget(contrast_row)
@@ -490,26 +483,30 @@ class MainWindow(QMainWindow):
     def _make_enhance_slider(self, label_text: str):
         label = QLabel(label_text)
         label.setObjectName("hint")
-        label.setFixedWidth(74)
+
+        value_label = QLabel("0")
+        value_label.setObjectName("valueChip")
+        value_label.setFixedWidth(36)
+        value_label.setAlignment(Qt.AlignCenter)
 
         slider = QSlider(Qt.Horizontal)
         slider.setRange(-100, 100)
         slider.setValue(0)
-
-        value_label = QLabel("0")
-        value_label.setObjectName("valueChip")
-        value_label.setFixedWidth(38)
-        value_label.setAlignment(Qt.AlignCenter)
         slider.valueChanged.connect(lambda v, lbl=value_label: lbl.setText(f"{v:+d}" if v else "0"))
         slider.valueChanged.connect(lambda _v: self._enhance_timer.start())
 
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.addWidget(label)
+        top.addStretch()
+        top.addWidget(value_label)
+
         row = QWidget()
-        row_layout = QHBoxLayout(row)
+        row_layout = QVBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(12)
-        row_layout.addWidget(label)
-        row_layout.addWidget(slider, stretch=1)
-        row_layout.addWidget(value_label)
+        row_layout.setSpacing(2)
+        row_layout.addLayout(top)
+        row_layout.addWidget(slider)
         return slider, row
 
     # ---- Worker lifetime -----------------------------------------------
