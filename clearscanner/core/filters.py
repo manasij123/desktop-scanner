@@ -628,6 +628,17 @@ def _snap_paper_to_white(channel: np.ndarray, paper_confidence: float, mask: np.
     wipe_soft = bright * smooth * not_a_highlight
     keep = keep * (1.0 - wipe_soft)
 
+    # Global backstop, for the busy strip right next to a dark logo / band
+    # where both the local estimate and the smoothness test are unreliable:
+    # a real scanner app makes the background a near-binary decision, so
+    # anything this bright that plainly isn't ink gets forced white on its
+    # absolute level alone. The tone push upstream has already lifted any
+    # genuine faint content well past here, and the subject mask (applied
+    # just below) still protects a real embedded photo.
+    global_wipe = (np.clip((ch - 197.0) / 22.0, 0.0, 1.0)
+                   * np.clip((ch - 165.0) / 25.0, 0.0, 1.0))
+    keep = keep * (1.0 - global_wipe)
+
     keep = 1.0 - paper_confidence * (1.0 - keep)
     if mask is not None:
         keep = np.maximum(keep, mask.astype(np.float32) / 255.0)
