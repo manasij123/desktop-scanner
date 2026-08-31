@@ -16,7 +16,7 @@
 - **Finds the page for you** — an ML segmentation model (rembg / u2netp) plus classic edge and brightness detection locate the document, even on a cluttered desk, and reject a photo that has no document in it.
 - **Fixes the angle** — four draggable corners + a perspective warp flatten a page shot from any angle into a straight-on rectangle.
 - **Four scan looks** — Original, Photo, Docs, Clear — each in colour or black & white. Docs / Clear flatten shadows, neutralise the paper tint, and push text to crisp black.
-- **Reconstruct fine detail** — optional "HD detail" runs an on-device super-resolution model (Real-ESRGAN) to rebuild crisp edges on text photographed too soft or too small.
+- **Sharpen soft text** — optional "Sharpen" toggle: a Lanczos upscale + two-scale unsharp that crisps up text photographed a little too soft or small. Sharpens what's there, never hallucinates a character.
 - **Recover faded text** — where glare or a bright reflection washed a stroke almost to white, re-ink it toward its true darkness — told apart from back-of-page show-through so bleed-through is left faint. Docs / Clear only.
 - **Photos and PDFs, in bulk** — drag a stack of images or an existing PDF onto the window (or onto the app icon to launch it on them); set the crop and look once, every page follows.
 - **Reads the text** — built-in OCR (Tesseract) in English and Bengali; copy it out or save as `.txt`.
