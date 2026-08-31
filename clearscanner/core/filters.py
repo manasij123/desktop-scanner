@@ -25,6 +25,7 @@ FILTER_MODES = COLOR_MODES  # back-compat alias (CLI, older callers)
 
 
 _ILLUM_ESTIMATE_SIZE = 800  # px, short side
+_SNAP_WORK_SIZE = 1400  # px, long side — _snap_paper_to_white builds its keep map here
 
 # CLAHE's clip limit — found via a real ID-card photo with an embedded ID
 # photo: at the previous 2.0, CLAHE's per-tile local histogram equalization
@@ -141,17 +142,21 @@ def _paper_level_map(channel: np.ndarray) -> np.ndarray:
     brightest tone around, i.e. what a pixel would read if it were clean
     paper. Used by _correct_illumination so a bright strip hemmed in by
     darker features still divides out to white. Kernel a touch wider than
-    _background_map's so it reliably spans a letterhead band."""
+    _background_map's so it reliably spans a letterhead band.
+
+    It's a very low-frequency signal, so the morphology runs on a small
+    (~360 px) copy — a dilate with a wide kernel on the full 800 px
+    estimate size was the single most expensive step in the filter."""
     h, w = channel.shape
-    scale = min(1.0, _ILLUM_ESTIMATE_SIZE / min(h, w))
+    scale = min(1.0, 360.0 / min(h, w))
     small = (cv2.resize(channel, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
              if scale < 1.0 else channel)
-    k = max(15, int(min(small.shape) * 0.11) | 1)
+    k = max(9, int(min(small.shape) * 0.12) | 1)
     est = cv2.dilate(small, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
     # a small erode back keeps a lone bright speck from dragging a whole
     # neighbourhood up; the estimate stays a smooth low-frequency signal
     est = cv2.erode(est, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (max(3, k // 4) | 1,) * 2))
-    est = cv2.GaussianBlur(est, (0, 0), k * 0.35)
+    est = cv2.blur(est, (max(3, k // 2) | 1,) * 2)
     return cv2.resize(est, (w, h), interpolation=cv2.INTER_LINEAR) if scale < 1.0 else est
 
 
@@ -302,10 +307,14 @@ def _whiten_highlights(channel: np.ndarray, blend_start: int = 200, white_point:
     white leaves normal photographic midtones alone while still pushing
     genuine paper the rest of the way to pure white.
     """
-    x = channel.astype(np.float32)
+    # A monotonic 1-D tone curve — build it once as a 256-entry LUT and
+    # map with cv2.LUT (near-free) instead of running the polynomial over
+    # every one of a multi-megapixel frame's pixels.
+    x = np.arange(256, dtype=np.float32)
     t = np.clip((x - blend_start) / max(white_point - blend_start, 1), 0.0, 1.0)
     t = t * t * (3 - 2 * t)  # smoothstep: eases in/out instead of a sharp knee
-    return np.clip(x + t * (255 - x), 0, 255).astype(np.uint8)
+    lut = np.clip(x + t * (255 - x), 0, 255).astype(np.uint8)
+    return cv2.LUT(np.ascontiguousarray(channel, dtype=np.uint8), lut)
 
 
 def _recover_faint_ink(channel: np.ndarray, strength: float = 1.0,
@@ -392,10 +401,11 @@ def _darken_shadows(channel: np.ndarray, blend_start: int = 90, black_point: int
     fully black, but a photo's shadow-side skin tones no longer get
     caught and crushed into blotchy near-black patches.
     """
-    x = channel.astype(np.float32)
+    x = np.arange(256, dtype=np.float32)  # a 256-entry LUT — see _whiten_highlights
     t = np.clip((blend_start - x) / max(blend_start - black_point, 1), 0.0, 1.0)
     t = t * t * (3 - 2 * t)  # smoothstep
-    return np.clip(x - t * x, 0, 255).astype(np.uint8)
+    lut = np.clip(x - t * x, 0, 255).astype(np.uint8)
+    return cv2.LUT(np.ascontiguousarray(channel, dtype=np.uint8), lut)
 
 
 def _darken_background(image: np.ndarray, mask: np.ndarray, strength: float) -> np.ndarray:
@@ -524,16 +534,18 @@ def _colored_fill_mask(image: np.ndarray, paper_confidence: float = 1.0) -> np.n
     """
     if paper_confidence <= 0:
         return np.zeros(image.shape[:2], np.float32)
-    sm = cv2.bilateralFilter(image, d=5, sigmaColor=50, sigmaSpace=50)
-    hsv = cv2.cvtColor(sm, cv2.COLOR_BGR2HSV)
+    h, w = image.shape[:2]
+    # everything here is low-frequency — downscale first, then a cheap
+    # median blur in place of a full-resolution bilateral
+    scale = min(1.0, 480.0 / min(h, w))
+    src = (cv2.resize(image, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+           if scale < 1.0 else image)
+    src = cv2.medianBlur(src, 3)
+    hsv = cv2.cvtColor(src, cv2.COLOR_BGR2HSV)
     s = hsv[..., 1].astype(np.float32)
     v = hsv[..., 2].astype(np.float32)
-    m = np.clip((s - 30.0) / 42.0, 0.0, 1.0) * ((v > 35) & (v < 250)).astype(np.float32)
+    small = np.clip((s - 30.0) / 42.0, 0.0, 1.0) * ((v > 35) & (v < 250)).astype(np.float32)
 
-    h, w = m.shape
-    scale = min(1.0, 480.0 / min(h, w))
-    small = (cv2.resize(m, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
-             if scale < 1.0 else m)
     k = max(3, int(min(small.shape) * 0.016) | 1)
     small = cv2.morphologyEx(small, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
     small = cv2.morphologyEx(small, cv2.MORPH_CLOSE,
@@ -589,7 +601,9 @@ def _protect_colored_fills(result: np.ndarray, image: np.ndarray, paper_confiden
     m = _colored_fill_mask(image, paper_confidence)
     if float(m.max()) < 0.05:
         return result
-    sm = cv2.bilateralFilter(image, d=5, sigmaColor=50, sigmaSpace=50)
+    # _render_colored_fills downscales its input to ~480 px anyway, so a
+    # cheap median is all the pre-smoothing the composite needs
+    sm = cv2.medianBlur(image, 3)
     if result.ndim == 2:
         pre = cv2.cvtColor(sm, cv2.COLOR_BGR2GRAY)
         target = _render_colored_fills(pre, m)
@@ -630,9 +644,20 @@ def _snap_paper_to_white(channel: np.ndarray, paper_confidence: float, mask: np.
     from being pulled to white and leaving a pale halo; a genuine faint
     shade to remove has already been lifted past 195 by the tone push
     upstream.
+
+    The `keep` map it all builds toward is low-frequency (it marks regions,
+    not pixel-exact edges), so it's computed on a downscaled copy and
+    bilinearly upscaled — a ~10x saving on a 12 MP page with no visible
+    difference — then applied at full resolution.
     """
-    local = _background_map(channel).astype(np.float32)
-    ch = channel.astype(np.float32)
+    full = channel.astype(np.float32)
+    h, w = channel.shape
+    scale = min(1.0, _SNAP_WORK_SIZE / max(h, w))
+    ch = (cv2.resize(channel, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+          .astype(np.float32) if scale < 1.0 else full)
+    small_mask = (cv2.resize(mask, (ch.shape[1], ch.shape[0]), interpolation=cv2.INTER_AREA)
+                  if (mask is not None and scale < 1.0) else mask)
+    local = _background_map(ch.astype(np.uint8)).astype(np.float32)
 
     below = local - ch
     keep_flat = np.clip((below - 12.0) / 28.0, 0.0, 1.0)
@@ -676,9 +701,12 @@ def _snap_paper_to_white(channel: np.ndarray, paper_confidence: float, mask: np.
     keep = keep * (1.0 - global_wipe)
 
     keep = 1.0 - paper_confidence * (1.0 - keep)
-    if mask is not None:
-        keep = np.maximum(keep, mask.astype(np.float32) / 255.0)
-    out = ch * keep + 255.0 * (1.0 - keep)
+    if small_mask is not None:
+        keep = np.maximum(keep, small_mask.astype(np.float32) / 255.0)
+
+    if scale < 1.0:
+        keep = cv2.resize(keep, (w, h), interpolation=cv2.INTER_LINEAR)
+    out = full * keep + 255.0 * (1.0 - keep)
     return np.clip(out, 0, 255).astype(np.uint8), keep
 
 
@@ -691,7 +719,8 @@ def _snap_lab(l: np.ndarray, a: np.ndarray, b: np.ndarray, paper_confidence: flo
     return l, a, b
 
 
-def to_docs(image: np.ndarray, allow_background_crush: bool = False, recover_ink: bool = False) -> np.ndarray:
+def to_docs(image: np.ndarray, allow_background_crush: bool = False, recover_ink: bool = False,
+            *, _skip_fill_protect: bool = False) -> np.ndarray:
     """Document-optimized but still color: shadow-flattening AND color-cast
     removal, so the background actually reads as clean white rather than
     a brighter version of whatever tint the ambient light left on it, plus
@@ -741,6 +770,8 @@ def to_docs(image: np.ndarray, allow_background_crush: bool = False, recover_ink
     l, a, b = _white_balance_lab(l, a, b)
     l, a, b = _snap_lab(l, a, b, confidence, mask)
     out = cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
+    if _skip_fill_protect:  # to_clear re-runs the whole tail and protects once at its end
+        return out
     return _protect_colored_fills(out, image, confidence, allow_background_crush)
 
 
@@ -757,7 +788,7 @@ def to_clear(image: np.ndarray, allow_background_crush: bool = False, recover_in
     miss difference at normal preview size; toggling Docs/Clear needs to be
     obviously different on sight, the way a real scanner app's is."""
     confidence = _paper_confidence(image)
-    docs = to_docs(image, allow_background_crush, recover_ink)
+    docs = to_docs(image, allow_background_crush, recover_ink, _skip_fill_protect=True)
     lab = cv2.cvtColor(docs, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
     pre_push_l = l
@@ -796,7 +827,8 @@ def to_photo_bw(image: np.ndarray) -> np.ndarray:
     return cv2.createCLAHE(clipLimit=_CLAHE_CLIP_LIMIT, tileGridSize=(8, 8)).apply(gray)
 
 
-def to_docs_bw(image: np.ndarray, allow_background_crush: bool = False, recover_ink: bool = False) -> np.ndarray:
+def to_docs_bw(image: np.ndarray, allow_background_crush: bool = False, recover_ink: bool = False,
+               *, _skip_fill_protect: bool = False) -> np.ndarray:
     """Docs, but monochrome: shadow-flattened, highlight/shadow contrast
     pushed, and unsharped — crisp printed-page look, same as color Docs.
     See to_docs's allow_background_crush note — only set this for a
@@ -819,6 +851,8 @@ def to_docs_bw(image: np.ndarray, allow_background_crush: bool = False, recover_
         gray = _darken_background(gray, mask, _BG_CRUSH_DOCS)
     gray = _unsharp(gray, amount=1.3, sigma=1.0)
     gray = _snap_paper_to_white(gray, confidence, mask)[0]
+    if _skip_fill_protect:
+        return gray
     return _protect_colored_fills(gray, image, confidence, allow_background_crush)
 
 
@@ -826,7 +860,7 @@ def to_clear_bw(image: np.ndarray, allow_background_crush: bool = False, recover
     """The flagship B&W: Docs pushed further still — mirrors to_clear,
     including its second, wider-band tonal push (see to_clear)."""
     confidence = _paper_confidence(image)
-    docs = to_docs_bw(image, allow_background_crush, recover_ink)
+    docs = to_docs_bw(image, allow_background_crush, recover_ink, _skip_fill_protect=True)
     pushed = _darken_shadows(_whiten_highlights(docs, blend_start=188, white_point=238), blend_start=105, black_point=52)
     gray = np.clip(docs.astype(np.float32) * (1 - confidence) + pushed.astype(np.float32) * confidence,
                     0, 255).astype(np.uint8)
@@ -881,6 +915,24 @@ _HANDLERS = {
 }
 
 
+# Docs/Clear do ~50 full-frame passes; on a 12 MP phone photo that is
+# seconds of memory-bandwidth-bound arithmetic for detail a document scan
+# never keeps. A4 at this long side is ~225 dpi — past what a hand-held
+# photo of a page actually resolves, and the "HD detail" path (whose own
+# output cap this matches, so an HD result passes through untouched) is
+# there for anyone who wants more. Original is left alone (it IS the raw
+# frame).
+_MAX_FILTER_DIM = 2600
+
+
+def _cap_resolution(image: np.ndarray) -> np.ndarray:
+    h, w = image.shape[:2]
+    if max(h, w) <= _MAX_FILTER_DIM:
+        return image
+    s = _MAX_FILTER_DIM / max(h, w)
+    return cv2.resize(image, (round(w * s), round(h * s)), interpolation=cv2.INTER_AREA)
+
+
 def apply_filter(
     image: np.ndarray, mode: str = "clear", bw: bool = False,
     allow_background_crush: bool = False, recover_ink: bool = False
@@ -895,6 +947,9 @@ def apply_filter(
     handler = _HANDLERS.get((mode, bw))
     if handler is None:
         raise ValueError(f"Unknown filter mode: {mode!r} (expected one of {COLOR_MODES})")
+    if mode == "original":
+        return handler(image)
+    image = _cap_resolution(image)
     if mode in ("docs", "clear"):
         return handler(image, allow_background_crush, recover_ink)
     return handler(image)
