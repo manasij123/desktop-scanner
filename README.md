@@ -58,12 +58,21 @@ OCR additionally needs the [Tesseract engine](https://github.com/UB-Mannheim/tes
 
 ## Build the installer
 
-See [`DEPLOY.md`](DEPLOY.md) for the full release workflow. In short:
-
 ```bash
 venv\Scripts\pyinstaller "Desktop Scanner.spec"
 "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer\DesktopScanner.iss
 ```
+
+See [`DEPLOY.md`](DEPLOY.md) for the full release workflow. Tagged
+releases (`vX.Y.Z`) are built on a GitHub Actions Windows runner from
+this same spec — see [`.github/workflows/release.yml`](.github/workflows/release.yml).
+Authenticode signing of the built `Desktop Scanner.exe` and the installer
+via [SignPath.io](https://signpath.io) is being set up.
+
+## Security & conduct
+
+- [`SECURITY.md`](SECURITY.md) — how to report a vulnerability privately.
+- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1.
 
 ## License
 
