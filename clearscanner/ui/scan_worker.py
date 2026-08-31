@@ -77,8 +77,8 @@ class FilterWorker(QThread):
 
 
 class HdWorker(QThread):
-    """Real-ESRGAN detail enhancement of a warped page — several seconds on
-    CPU, so it reports progress and runs off the UI thread."""
+    """Runs core.upscale.enhance (the "Sharpen" toggle) off the UI thread —
+    it's sub-second now but still reports progress for the ring."""
     progress = Signal(float)     # 0.0 - 1.0
     resultReady = Signal(object)  # enhanced BGR ndarray
     errorOccurred = Signal(str)

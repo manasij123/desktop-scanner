@@ -116,7 +116,7 @@ class MainWindow(QMainWindow):
         # otherwise.
         self._detection_fallback_used = False
         self._warped_image = None  # BGR ndarray, post-warp / pre-filter
-        self._hd_image = None  # Real-ESRGAN-enhanced _warped_image, once computed
+        self._hd_image = None  # sharpened _warped_image, once computed
         self._hd_worker = None
         self._hd_request_id = 0
         self._base_processed_image = None  # filter output, before Enhance sliders
@@ -406,10 +406,10 @@ class MainWindow(QMainWindow):
         self._enhance_btn.setCheckable(True)
         self._enhance_btn.toggled.connect(self._on_enhance_toggled)
 
-        self._hd_btn = side_btn("HD detail", "scan")
+        self._hd_btn = side_btn("Sharpen", "scan")
         self._hd_btn.setCheckable(True)
         self._hd_btn.setVisible(False)
-        self._hd_btn.setToolTip("Reconstruct crisp text from a slightly soft photo (takes a few seconds)")
+        self._hd_btn.setToolTip("Crisp up slightly soft text and lines — an upscale plus a two-scale unsharp")
         self._hd_btn.toggled.connect(self._on_hd_toggled)
 
         self._recover_btn = side_btn("Recover faded text", "text")
@@ -811,7 +811,7 @@ class MainWindow(QMainWindow):
         else:
             self._apply_filter()
 
-    # ---- HD (super-resolution) -----------------------------------------
+    # ---- Sharpen ------------------------------------------------------
 
     def _filter_source(self):
         """The image the filter presets run on — the HD-enhanced copy when
@@ -833,9 +833,9 @@ class MainWindow(QMainWindow):
         rid = self._hd_request_id
         self._hd_btn.setEnabled(False)
         self._ring_wrap.setVisible(True)
-        self._ring_caption.setText("HD")
+        self._ring_caption.setText("SHARPEN")
         self._status_ring.set_value(0.02, "")
-        self.statusBar().showMessage("Reconstructing detail...")
+        self.statusBar().showMessage("Sharpening...")
 
         worker = HdWorker(self._warped_image)
         worker.progress.connect(lambda f: self._status_ring.set_value(max(0.02, f)))
@@ -850,7 +850,7 @@ class MainWindow(QMainWindow):
             return  # a newer crop / toggle superseded this run
         self._hd_image = image
         self._hd_btn.setEnabled(True)
-        self.statusBar().showMessage("Detail enhanced.", 3000)
+        self.statusBar().showMessage("Sharpened.", 3000)
         self._sync_pages_ring()
         self._apply_filter()
 
@@ -861,7 +861,7 @@ class MainWindow(QMainWindow):
         self._hd_btn.blockSignals(False)
         self._sync_pages_ring()
         self.statusBar().clearMessage()
-        QMessageBox.warning(self, "HD detail failed", message)
+        QMessageBox.warning(self, "Sharpen failed", message)
 
     def _on_recover_toggled(self, _checked: bool):
         if self._warped_image is not None:

@@ -1,107 +1,70 @@
-"""On-device detail enhancement ("HD") via Real-ESRGAN general-x4v3.
+"""On-device detail enhancement ("Sharpen") for a slightly soft scan.
 
-A ~4.9 MB ONNX model, run on the onnxruntime the app already bundles for
-rembg. It reconstructs real detail — a slightly soft phone photo of a page
-comes out with genuinely crisp text — rather than just sharpening what's
-there. It's 4x, so the input is capped and the output resized back to a
-sensible working size; runs tiled so memory stays flat and progress can
-be reported.
+Deliberately NOT a learned super-resolution model. Real-ESRGAN and the
+like reconstruct *plausible* detail — great for a photo, but on a document
+they hallucinate: letters and digits get quietly rewritten ("Enrollment"
+-> "Enrollmoni", an Aadhaar number's digits changed), and a QR / barcode
+turns to mush. For a document scanner that is unacceptable.
 
-enhance() is CPU-bound and takes a few seconds — always call it from a
-worker thread (see ui/scan_worker.HdWorker).
+Instead this does an honest job: a Lanczos upscale (when the scan is small
+enough to benefit) followed by a two-scale unsharp mask — a wide gentle
+pass for local contrast and a tight strong pass for edge acutance. It
+makes soft text visibly crisper and never invents a character. Fast
+enough (< 1 s) that the worker-thread + progress machinery is kept only
+for interface compatibility.
 """
-import os
-import threading
-
 import cv2
 import numpy as np
 
-_MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "assets", "models", "realesr-general-x4v3.onnx")
-
-SCALE = 4
-_INPUT_CAP = 1100      # px, long side — a softer photo above this gains nothing from SR
-_OUTPUT_CAP = 2600     # px, long side of the returned image
-_TILE = 224            # SR input tile (before the model's 4x)
-_OVERLAP = 16          # tile overlap, trimmed after — kills seams
-
-_session = None
-_session_lock = threading.Lock()
+_OUTPUT_CAP = 2600  # px, long side of the returned image
 
 
 def is_available() -> bool:
-    return os.path.exists(_MODEL_PATH)
-
-
-def _get_session():
-    global _session
-    if _session is not None:
-        return _session
-    with _session_lock:
-        if _session is None:
-            import onnxruntime as ort
-
-            opts = ort.SessionOptions()
-            opts.intra_op_num_threads = max(1, (os.cpu_count() or 4) - 1)
-            _session = ort.InferenceSession(
-                os.path.abspath(_MODEL_PATH), sess_options=opts, providers=["CPUExecutionProvider"]
-            )
-    return _session
-
-
-def _run_tile(session, rgb_tile: np.ndarray) -> np.ndarray:
-    x = rgb_tile.astype(np.float32).transpose(2, 0, 1)[None] / 255.0
-    y = session.run(None, {session.get_inputs()[0].name: x})[0]
-    y = np.clip(y[0].transpose(1, 2, 0), 0.0, 1.0) * 255.0
-    return y.astype(np.uint8)
+    """Always — no model file or extra runtime needed any more."""
+    return True
 
 
 def enhance(bgr: np.ndarray, progress=None) -> np.ndarray:
-    """Return a detail-enhanced copy of `bgr`. `progress`, if given, is
-    called with a 0.0-1.0 fraction as tiles complete."""
-    session = _get_session()
+    """Return a sharper copy of `bgr`. `progress`, if given, is called with
+    a 0.0-1.0 fraction as the work proceeds."""
+    if progress:
+        progress(0.05)
 
-    h0, w0 = bgr.shape[:2]
-    long0 = max(h0, w0)
-    src = bgr
-    if long0 > _INPUT_CAP:
-        s = _INPUT_CAP / long0
-        src = cv2.resize(bgr, (round(w0 * s), round(h0 * s)), interpolation=cv2.INTER_AREA)
+    h, w = bgr.shape[:2]
+    long = max(h, w)
+    # Only upscale a scan that's actually small; a big one just gets the
+    # sharpen. Cap so a huge input doesn't balloon.
+    if long < 1400:
+        factor = 2.0
+    elif long < 2000:
+        factor = 1.5
+    else:
+        factor = 1.0
+    if factor * long > _OUTPUT_CAP:
+        factor = _OUTPUT_CAP / long
 
-    rgb = cv2.cvtColor(src, cv2.COLOR_BGR2RGB)
-    h, w = rgb.shape[:2]
-    out = np.empty((h * SCALE, w * SCALE, 3), dtype=np.uint8)
+    # a light edge-preserving denoise first, so the sharpen doesn't just
+    # amplify sensor noise / JPEG blocking
+    img = cv2.bilateralFilter(bgr, d=5, sigmaColor=35, sigmaSpace=35)
+    if progress:
+        progress(0.3)
 
-    ys = list(range(0, h, _TILE))
-    xs = list(range(0, w, _TILE))
-    total = len(ys) * len(xs)
-    done = 0
-    for y in ys:
-        for x in xs:
-            y1 = max(0, y - _OVERLAP)
-            x1 = max(0, x - _OVERLAP)
-            y2 = min(h, y + _TILE + _OVERLAP)
-            x2 = min(w, x + _TILE + _OVERLAP)
-            up = _run_tile(session, rgb[y1:y2, x1:x2])
+    if factor > 1.01:
+        img = cv2.resize(img, (round(w * factor), round(h * factor)), interpolation=cv2.INTER_LANCZOS4)
+    if progress:
+        progress(0.55)
 
-            # place the un-overlapped centre
-            ty1 = (y - y1) * SCALE
-            tx1 = (x - x1) * SCALE
-            ph = min(_TILE, h - y) * SCALE
-            pw = min(_TILE, w - x) * SCALE
-            out[y * SCALE:y * SCALE + ph, x * SCALE:x * SCALE + pw] = up[ty1:ty1 + ph, tx1:tx1 + pw]
+    f = img.astype(np.float32)
+    wide = cv2.GaussianBlur(f, (0, 0), 3.0)
+    f = f + 0.55 * (f - wide)            # local-contrast / "clarity"
+    if progress:
+        progress(0.8)
+    tight = cv2.GaussianBlur(f, (0, 0), 1.0)
+    f = f + 1.15 * (f - tight)           # edge acutance
+    if progress:
+        progress(0.97)
 
-            done += 1
-            if progress:
-                progress(done / total)
-
-    result = cv2.cvtColor(out, cv2.COLOR_RGB2BGR)
-
-    # bring it back to a working size — 2x the (capped) source is plenty
-    target_long = min(_OUTPUT_CAP, max(h, w) * 2)
-    cur_long = max(result.shape[:2])
-    if cur_long > target_long:
-        s = target_long / cur_long
-        result = cv2.resize(
-            result, (round(result.shape[1] * s), round(result.shape[0] * s)), interpolation=cv2.INTER_AREA
-        )
-    return result
+    out = np.clip(f, 0, 255).astype(np.uint8)
+    if progress:
+        progress(1.0)
+    return out
