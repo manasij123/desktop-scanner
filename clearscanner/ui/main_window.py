@@ -50,6 +50,7 @@ from clearscanner.ui.update_worker import UpdateCheckWorker, UpdateDownloadWorke
 from clearscanner.ui.widgets import Ring
 
 OPEN_FILTER = "Images and PDFs (*.png *.jpg *.jpeg *.bmp *.pdf)"
+OPEN_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".pdf"}  # keep in sync with OPEN_FILTER
 SAVE_FILTER = "JPEG (*.jpg);;PNG (*.png)"
 PDF_FILTER = "PDF (*.pdf)"
 DESKTOP_DIR = os.path.join(os.path.expanduser("~"), "Desktop")
@@ -152,6 +153,15 @@ class MainWindow(QMainWindow):
         self._enhance_timer.timeout.connect(self._apply_enhancement)
 
         self._build_ui()
+
+        # Drag one or more images / PDFs straight onto the window (or onto
+        # the app icon — see main._paths_from_argv) to import them.
+        self.setAcceptDrops(True)
+        self._drop_hint = QLabel("Drop to scan", self)
+        self._drop_hint.setObjectName("dropHint")
+        self._drop_hint.setAlignment(Qt.AlignCenter)
+        self._drop_hint.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self._drop_hint.setVisible(False)
 
         # Auto-update state (see _on_update_available); the check itself is
         # kicked off from _start_background_tasks after the window is shown.
@@ -581,18 +591,28 @@ class MainWindow(QMainWindow):
 
     def _on_open(self):
         selected, _ = QFileDialog.getOpenFileNames(self, "Open Image(s) or PDF", "", OPEN_FILTER)
+        if selected:
+            self.open_paths(selected)
+
+    def open_paths(self, selected: list) -> bool:
+        """Import one or more image / PDF file paths. The shared entry point
+        for the Open button, a drag-and-drop onto the window, and files
+        passed on the command line (dropping them on the app icon). Returns
+        True if an import actually started."""
+        selected = [p for p in selected
+                    if os.path.isfile(p) and os.path.splitext(p)[1].lower() in OPEN_EXTS]
         if not selected:
-            return
+            return False
 
         paths = self._expand_pdfs(selected)
         if not paths:
-            return  # every selected PDF failed to open; already warned
+            return False  # every selected PDF failed to open; already warned
 
         self._batch_skip_crop = False
         if len(paths) > 1:
             dialog = BatchSettingsDialog(len(paths), self)
             if dialog.exec() != QDialog.Accepted:
-                return
+                return False
             self._batch_skip_crop = not dialog.border_adjustment()
             self._filter_tabs.setCurrent(dialog.mode())
             self._bw_toggle.setCurrent(dialog.bw())
@@ -603,6 +623,44 @@ class MainWindow(QMainWindow):
         self._batch_index = 1
         self._update_batch_label()
         self.load_image(paths[0])
+        return True
+
+    # ---- drag a file onto the window ---------------------------------
+
+    @staticmethod
+    def _dropped_paths(mime) -> list:
+        if not mime.hasUrls():
+            return []
+        out = []
+        for url in mime.urls():
+            p = url.toLocalFile()
+            if p and os.path.splitext(p)[1].lower() in OPEN_EXTS:
+                out.append(p)
+        return out
+
+    def dragEnterEvent(self, event):
+        if self._dropped_paths(event.mimeData()):
+            event.acceptProposedAction()
+            self._drop_hint.setGeometry(self.rect())
+            self._drop_hint.raise_()
+            self._drop_hint.setVisible(True)
+
+    def dragMoveEvent(self, event):
+        if self._dropped_paths(event.mimeData()):
+            event.acceptProposedAction()
+
+    def dragLeaveEvent(self, event):
+        self._drop_hint.setVisible(False)
+
+    def dropEvent(self, event):
+        self._drop_hint.setVisible(False)
+        paths = self._dropped_paths(event.mimeData())
+        if not paths:
+            return
+        event.acceptProposedAction()
+        self.raise_()
+        self.activateWindow()
+        self.open_paths(paths)
 
     def _expand_pdfs(self, selected: list) -> list:
         """Replace any selected .pdf with its rendered pages (each saved to
@@ -965,6 +1023,8 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        if self._drop_hint.isVisible():
+            self._drop_hint.setGeometry(self.rect())
         if self._processed_image is not None and self._stack.currentIndex() == 1:
             self._show_preview(self._processed_image)
 

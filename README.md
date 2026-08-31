@@ -18,7 +18,7 @@
 - **Four scan looks** — Original, Photo, Docs, Clear — each in colour or black & white. Docs / Clear flatten shadows, neutralise the paper tint, and push text to crisp black.
 - **Reconstruct fine detail** — optional "HD detail" runs an on-device super-resolution model (Real-ESRGAN) to rebuild crisp edges on text photographed too soft or too small.
 - **Recover faded text** — where glare or a bright reflection washed a stroke almost to white, re-ink it toward its true darkness — told apart from back-of-page show-through so bleed-through is left faint. Docs / Clear only.
-- **Photos and PDFs, in bulk** — batch-import a stack of images or an existing PDF; set the crop and look once, every page follows.
+- **Photos and PDFs, in bulk** — drag a stack of images or an existing PDF onto the window (or onto the app icon to launch it on them); set the crop and look once, every page follows.
 - **Reads the text** — built-in OCR (Tesseract) in English and Bengali; copy it out or save as `.txt`.
 - **One clean PDF out** — reorder / rotate / drop pages, then export a single A4 PDF, or print.
 

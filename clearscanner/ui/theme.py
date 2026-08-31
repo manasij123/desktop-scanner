@@ -233,6 +233,17 @@ QLabel#subTitle {{ color: {MUTED}; font-size: 12px; font-weight: 500; }}
 QLabel#hint {{ color: {MUTED}; font-size: 12.5px; }}
 QLabel#sectionLabel {{ color: {INK_SOFT}; font-size: 10px; font-weight: 800; letter-spacing: 1.1px; }}
 
+QLabel#dropHint {{
+    background-color: rgba(233, 230, 255, 0.86);
+    color: {ACCENT_INK};
+    font-size: 27px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    border: 3px dashed {ACCENT};
+    border-radius: {RADIUS_LG}px;
+    margin: 14px;
+}}
+
 QWidget#statPill {{
     background-color: rgba(255,255,255,0.55);
     border: 1px solid {_GLASS_LINE};
