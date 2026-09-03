@@ -26,6 +26,25 @@ benchmark/results/
 # --- ML model cache (rembg / u2netp weights, downloaded at runtime) ---
 *.onnx
 
+# --- Web app (webapp/ is the source; `npm run build` emits docs/app/, which
+#     IS committed and served by GitHub Pages at /desktop-scanner/app/) ---
+webapp/node_modules/
+webapp/.vite/
+node_modules/
+webapp/public/testcard*
+docs/app/testcard*
+
+# --- Real ID photos & competitor reference images used for filter tuning
+#     (a real person's Aadhaar card, bank docs, signatures) — local only ---
+IMG-*.jpg
+IMG-*.jpeg
+*ClearScan*.jpg
+*ClearScan*.jpeg
+Document_*_ClearScan*
+*_ClearScan_*.jpeg
+test_docs/
+test_out/
+
 # --- OS / editor cruft ---
 .DS_Store
 Thumbs.db

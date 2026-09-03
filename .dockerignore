@@ -1,0 +1,27 @@
+# the API image only needs clearscanner/ + server/ (see ./Dockerfile)
+.git
+.github
+venv
+.venv
+node_modules
+webapp
+docs
+dist
+build
+*.spec
+installer
+benchmark
+apk_re
+test_docs
+test_out
+scratchpad
+**/__pycache__
+*.pyc
+*.jpg
+*.jpeg
+*.png
+!clearscanner/assets/**
+*.exe
+*.zip
+.vscode
+.idea

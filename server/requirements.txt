@@ -1,0 +1,21 @@
+# Web backend — the clearscanner pipeline over HTTP.
+# Run:  pip install -r server/requirements.txt
+#       uvicorn server.main:app --port 8000 --host 127.0.0.1
+#   (or just: cd webapp && npm run dev  — it starts this automatically)
+
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+
+# --- clearscanner.core deps used by the detect / render / ocr paths ---
+# (no img2pdf / pymupdf — PDF import + export are client-side in the web app)
+numpy>=1.26,<3
+opencv-python-headless>=4.10,<5
+Pillow>=10.2
+pytesseract>=0.3.13          # needs a system Tesseract install for /ocr
+
+# --- ML document segmentation (detector._detect_by_ml / get_subject_mask) ---
+# ~150 MB; the u2netp model (~4 MB) is baked into the Docker image so there's
+# no cold download. Drop both to fall back to edge/brightness detection only.
+rembg>=2.0
+onnxruntime>=1.17

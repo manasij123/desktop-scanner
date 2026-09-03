@@ -1,0 +1,35 @@
+# fly.toml app configuration file generated for desktop-scanner-api on 2026-09-03T17:00:00+05:30
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'desktop-scanner-api'
+primary_region = 'sin'
+
+[build]
+[env]
+  DSC_ALLOW_ORIGINS = 'https://manasij123.github.io'
+  DSC_CACHE_SCALE = '0.5'
+  DSC_MAX_CONCURRENCY = '2'
+  DSC_THREADS = '1'                # shared-cpu-1x = 1 vCPU; os.cpu_count() lies in a container
+  DSC_DISABLE_ML = '1'             # no rembg on this small instance — Canny/Otsu detection
+  PORT = '8080'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+  [http_service.concurrency]
+    type = 'requests'
+    hard_limit = 8
+    soft_limit = 5
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'
+  cpus = 1
+  memory_mb = 512

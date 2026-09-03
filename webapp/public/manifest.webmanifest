@@ -1,0 +1,16 @@
+{
+  "id": "desktop-scanner-web",
+  "name": "Desktop Scanner for the Web",
+  "short_name": "Scanner",
+  "description": "Turn a photo of a page into a real scan, entirely in your browser. Nothing uploaded, nothing installed.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#14111F",
+  "theme_color": "#14111F",
+  "orientation": "any",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

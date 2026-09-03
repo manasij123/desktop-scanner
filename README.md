@@ -43,6 +43,14 @@ python main.py
 
 OCR additionally needs the [Tesseract engine](https://github.com/UB-Mannheim/tesseract) on `PATH` (or installed at its default Windows location). Language data for English + Bengali is bundled under `clearscanner/assets/tessdata/`.
 
+## Web version
+
+`webapp/` is a browser port of the same workflow — the perspective warp
+and all four scan looks run as two WebGL2 passes, entirely client-side
+(no upload, offline after first load). `npm run build` emits it into
+`docs/app/`, which GitHub Pages serves at `/desktop-scanner/app/`. See
+[`webapp/README.md`](webapp/README.md).
+
 ## Project layout
 
 | Path | What's there |
@@ -54,7 +62,8 @@ OCR additionally needs the [Tesseract engine](https://github.com/UB-Mannheim/tes
 | `clearscanner/output/` | Multi-page PDF writer |
 | `benchmark/` | Systematic quality-benchmark scripts (test images kept local) |
 | `installer/` | Inno Setup script for the Windows installer |
-| `docs/` | The download website (GitHub Pages) |
+| `webapp/` | Browser port — React + WebGL2 pipeline, builds into `docs/app/` |
+| `docs/` | The download website (GitHub Pages), plus the built web app under `docs/app/` |
 
 ## Build the installer
 

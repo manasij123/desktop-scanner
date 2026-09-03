@@ -1,0 +1,27 @@
+# what NOT to upload to Cloud Build for `gcloud run deploy --source .`
+# (the image only needs ./Dockerfile + clearscanner/ + server/)
+.git
+.github
+.venv
+venv
+node_modules
+webapp
+docs
+dist
+build
+installer
+benchmark
+apk_re
+test_docs
+test_out
+scratchpad
+**/__pycache__
+*.pyc
+*.exe
+*.spec
+*.jpg
+*.jpeg
+*.png
+!clearscanner/assets/**
+.vscode
+.idea

@@ -1,0 +1,38 @@
+name: deploy-api
+
+# Builds the backend Docker image and deploys it to Fly.io.
+#
+# One-time setup:
+#   fly tokens create deploy -x 999999h        # (locally, after `fly launch`)
+#   repo -> Settings -> Secrets and variables -> Actions -> New secret
+#     FLY_API_TOKEN = <that token>
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'fly.toml'
+      - 'server/**'
+      - 'clearscanner/**'
+      - '.github/workflows/deploy-api.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - run: |
+          app="$(grep -m1 '^app' fly.toml | cut -d\' -f2)"
+          curl -sf --max-time 90 "https://$app.fly.dev/health" \
+            && echo "health OK -> https://$app.fly.dev" >> "$GITHUB_STEP_SUMMARY" \
+            || echo "::warning::health check did not pass"
