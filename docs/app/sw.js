@@ -4,8 +4,8 @@
    successful GET as it is fetched and serves from cache when the network
    is gone. Bump CACHE to invalidate everything on a new deploy. */
 
-const CACHE = 'dsc-web-v3'
-const CORE = ['./', './index.html', './manifest.webmanifest', './icon.svg', './mark-white.svg', './intro.gif']
+const CACHE = 'dsc-web-v7'
+const CORE = ['./', './index.html', './manifest.webmanifest', './logo.png', './favicon.png', './intro.gif']
 
 self.addEventListener('install', (e) => {
   e.waitUntil(

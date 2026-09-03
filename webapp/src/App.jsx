@@ -146,6 +146,7 @@ export default function App() {
   const [serverInfo, setServerInfo] = useState(null) // { ok, ocr } | null
   const [checking, setChecking] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showConnHelp, setShowConnHelp] = useState(false)
   const [srvPreview, setSrvPreview] = useState(null) // object URL of the server-rendered preview
   const [srvBusy, setSrvBusy] = useState(false)
   const useServer = !!(serverInfo && serverInfo.ok && apiUrl)
@@ -307,7 +308,7 @@ export default function App() {
     ctx.moveTo(P[0][0], P[0][1])
     for (let i = 1; i < 4; i++) ctx.lineTo(P[i][0], P[i][1])
     ctx.closePath()
-    ctx.fillStyle = 'rgba(34,31,53,0.44)'
+    ctx.fillStyle = 'rgba(47,47,92,0.44)'
     ctx.fill('evenodd')
     ctx.restore()
 
@@ -315,11 +316,11 @@ export default function App() {
     ctx.moveTo(P[0][0], P[0][1])
     for (let i = 1; i < 4; i++) ctx.lineTo(P[i][0], P[i][1])
     ctx.closePath()
-    ctx.strokeStyle = '#5B4BE6'
+    ctx.strokeStyle = '#6466E8'
     ctx.lineWidth = 2
     ctx.stroke()
 
-    ctx.fillStyle = '#5B4BE6'
+    ctx.fillStyle = '#6466E8'
     for (const [a, b] of EDGES) {
       const mx = (P[a][0] + P[b][0]) / 2
       const my = (P[a][1] + P[b][1]) / 2
@@ -328,7 +329,7 @@ export default function App() {
     for (const [x, y] of P) {
       ctx.beginPath()
       ctx.arc(x, y, 7, 0, Math.PI * 2)
-      ctx.fillStyle = '#5B4BE6'
+      ctx.fillStyle = '#6466E8'
       ctx.fill()
       ctx.lineWidth = 2.5
       ctx.strokeStyle = '#fff'
@@ -661,7 +662,7 @@ export default function App() {
 
       <nav className="rail">
         <div className="rail-logo">
-          <img src={`${import.meta.env.BASE_URL}mark-white.svg`} alt="Desktop Scanner" width="26" height="26" />
+          <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Desktop Scanner" />
         </div>
         <button className="rail-btn primary" title="Add photos" onClick={pickFiles}>
           <Icon name="plus" size={20} />
@@ -934,7 +935,20 @@ export default function App() {
           <span className={`dot${busy ? ' busy' : ''}`} />
           {busy || status}
           <span className="statusbar-spacer" />
-          <span className="statusbar-mode">{useServer ? `server · ${apiUrl.replace(/^https?:\/\//, '')}` : 'on-device'}</span>
+          {checking ? (
+            <span className="srv-stat">checking server…</span>
+          ) : useServer ? (
+            <span className="srv-stat ok">server · connected</span>
+          ) : (
+            <button
+              className="srv-stat bad"
+              onClick={() => setShowConnHelp(true)}
+              title="How to connect a server"
+            >
+              server · not connected
+              <span className="srv-stat-i"><Icon name="info" size={11} /></span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -949,6 +963,13 @@ export default function App() {
         />
       )}
 
+      {showConnHelp && (
+        <ConnectHelp
+          onOpenSettings={() => { setShowConnHelp(false); setShowSettings(true) }}
+          onClose={() => setShowConnHelp(false)}
+        />
+      )}
+
       <div className="toasts">
         {toasts.map((t) => (
           <div key={t.id} className={`toast ${t.kind}`}>
@@ -957,6 +978,34 @@ export default function App() {
             {t.text}
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+/* ---- "how do I connect a server" helper ---- */
+function ConnectHelp({ onOpenSettings, onClose }) {
+  return (
+    <div className="modal-scrim" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <b>Connect a processing server</b>
+          <button className="iconbtn sm" onClick={onClose}><Icon name="x" size={14} /></button>
+        </div>
+        <p className="modal-note">
+          The app works on-device now — your photos stay in the browser. Connect a
+          server to render through the full desktop pipeline: cleaner shadows,
+          whiter paper, crisper text.
+        </p>
+        <ol className="help-steps">
+          <li>Top-right — click the <b>On-device</b> chip.</li>
+          <li>Enter the server address (or tap <b>Use hosted server</b>).</li>
+          <li>Click <b>Connect</b>.</li>
+        </ol>
+        <div className="modal-actions">
+          <button className="btn ghost" onClick={onClose}>Close</button>
+          <button className="btn primary" onClick={onOpenSettings}>Open server settings</button>
+        </div>
       </div>
     </div>
   )
