@@ -379,6 +379,8 @@ svg { display: block; }
 .ctl-btn:disabled { opacity: .45; cursor: not-allowed; }
 .ctl-btn .ctl-check { margin-left: auto; color: var(--accent); }
 
+/* tool cluster — a plain column on desktop, a horizontal scroll ribbon on phones */
+.ctl-ribbon { display: flex; flex-direction: column; gap: 9px; }
 /* rotate pair — two half-width buttons on one row */
 .ctl-rotate { display: flex; gap: 9px; }
 .ctl-rotate .ctl-btn { flex: 1 1 0; min-width: 0; justify-content: center; }
@@ -558,38 +560,56 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
   .card { border-radius: var(--radius); }
   .card canvas, .card img { max-width: calc(100% - 10px); max-height: calc(100% - 10px); }
 
+  /* top strip: the 4 scan styles + colour/B&W toggle, all on one line
+     (scrolls sideways only if it truly can't fit) */
   .ctl-styles {
     order: -1; flex: 0 0 auto;
-    flex-direction: row; align-items: center; gap: 8px; overflow-x: auto;
-    padding: 7px 8px; margin: 0; border-radius: var(--radius);
+    flex-direction: row; align-items: center; gap: 6px; overflow-x: auto;
+    padding: 6px 8px; margin: 0; border-radius: var(--radius);
     background: var(--glass-hi); border: 1px solid var(--glass-line); box-shadow: var(--shadow-sm);
     scrollbar-width: none;
   }
   .ctl-styles::-webkit-scrollbar { display: none; }
   .ctl-styles > .seclabel, .ctl-styles > .mode-desc, .ctl-styles .doc-hint { display: none; }
-  .ctl-styles .segmented.vertical { flex: 0 0 auto; flex-direction: row; gap: 6px; }
-  .ctl-styles .seg-btn {
-    flex: 0 0 auto; flex-direction: column; align-items: center; gap: 4px;
-    min-width: 58px; padding: 7px 8px; font-size: 10px; border-radius: 10px;
+  .ctl-styles .segmented.vertical {
+    flex: 0 0 auto; flex-direction: row; gap: 4px; padding: 0; background: none; border: 0;
   }
-  .ctl-styles .seg-swatch { width: 18px; height: 18px; border-radius: 5px; }
-  .ctl-styles .pilltoggle { flex: 0 0 auto; margin-left: auto; }
-  .ctl-styles .pill-opt { padding: 8px 12px; }
+  .ctl-styles .seg-btn {
+    flex: 0 0 auto; flex-direction: column; align-items: center; gap: 3px;
+    min-width: 50px; padding: 6px 7px; font-size: 9.5px; font-weight: 700;
+    border-radius: 9px; background: var(--glass-sunk);
+  }
+  .ctl-styles .seg-btn.active { background: var(--accent); color: #fff; }
+  .ctl-styles .seg-swatch { width: 13px; height: 13px; border-radius: 4px; }
+  .ctl-styles .pilltoggle { flex: 0 0 auto; margin: 0; padding: 2px; }
+  .ctl-styles .pill-opt { padding: 6px 9px; font-size: 10.5px; }
 
   .ctl-tools {
-    order: 1; flex: 0 0 auto; max-height: 30vh; overflow-y: auto; margin: 0;
-    flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 8px;
+    order: 1; flex: 0 0 auto; max-height: 34vh; overflow-y: auto; margin: 0;
+    flex-direction: column; gap: 8px; padding: 8px;
     border-radius: var(--radius); background: var(--glass-hi);
     border: 1px solid var(--glass-line); box-shadow: var(--shadow-sm);
   }
   .ctl-tools .hairline, .ctl-tools > .seclabel { display: none; }
-  .ctl-tools .ctl-rotate { display: contents; }
-  .ctl-tools .ctl-btn {
-    flex: 1 1 42%; flex-direction: column; gap: 5px; padding: 9px 6px;
-    justify-content: center; text-align: center; font-size: 10.5px; position: relative;
+
+  /* tools sit shoulder-to-shoulder in one sideways-scrolling ribbon */
+  .ctl-ribbon {
+    flex-direction: row; flex-wrap: nowrap; gap: 5px;
+    overflow-x: auto; scrollbar-width: none; margin: 0 -2px; padding: 2px;
+    scroll-snap-type: x proximity;
   }
-  .ctl-tools .ctl-btn .ctl-check { position: absolute; top: 4px; right: 6px; }
-  .ctl-tools .enhance, .ctl-tools .ocr-select, .ctl-tools .ocr-out, .ctl-tools .btn.block { flex: 1 1 100%; }
+  .ctl-ribbon::-webkit-scrollbar { display: none; }
+  .ctl-rotate { display: contents; }
+  .ctl-ribbon .ctl-btn {
+    flex: 0 0 auto; width: auto; min-width: 58px;
+    flex-direction: column; gap: 4px; padding: 8px 6px;
+    justify-content: center; text-align: center; font-size: 10px; position: relative;
+    scroll-snap-align: start;
+  }
+  .ctl-ribbon .ctl-btn > svg:first-child { flex: none; }
+  .ctl-ribbon .ctl-btn .ctl-check { position: absolute; top: 3px; right: 5px; margin: 0; }
+
+  .ctl-tools .enhance, .ctl-tools .ocr-select, .ctl-tools .ocr-out, .ctl-tools .btn.block { width: 100%; }
 
   .ctl-actions {
     order: 2; flex: 0 0 auto; gap: 7px;

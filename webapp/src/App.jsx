@@ -955,43 +955,46 @@ export default function App() {
                   <div className="ctl-tools">
                   <div className="hairline mob-hide" />
 
-                  <span className="seclabel">Rotate</span>
-                  <div className="ctl-rotate">
-                    <button className="ctl-btn" onClick={() => rotateSource(-1)} title="Rotate left">
-                      <Icon name="rotate-left" size={16} /> Left
+                  <span className="seclabel">Tools</span>
+                  <div className="ctl-ribbon">
+                    <div className="ctl-rotate">
+                      <button className="ctl-btn" onClick={() => rotateSource(-1)} title="Rotate left">
+                        <Icon name="rotate-left" size={16} /> <span>Left</span>
+                      </button>
+                      <button className="ctl-btn" onClick={() => rotateSource(1)} title="Rotate right">
+                        <Icon name="rotate-right" size={16} /> <span>Right</span>
+                      </button>
+                    </div>
+
+                    <button className="ctl-btn" onClick={() => setStage('crop')} title="Re-crop">
+                      <Icon name="crop" size={16} /> <span>Re-crop</span>
                     </button>
-                    <button className="ctl-btn" onClick={() => rotateSource(1)} title="Rotate right">
-                      <Icon name="rotate-right" size={16} /> Right
+                    <button
+                      className={`ctl-btn${opts.sharpen ? ' active' : ''}`}
+                      onClick={() => setOpts((o) => ({ ...o, sharpen: !o.sharpen }))}
+                      title="Crisp up slightly soft text and lines"
+                    >
+                      <Icon name="sparkle" size={16} /> <span>Sharpen</span>
+                      {opts.sharpen && <Icon name="check" size={15} className="ctl-check" />}
+                    </button>
+                    <button
+                      className={`ctl-btn${opts.recover ? ' active' : ''}`}
+                      disabled={!recoverable}
+                      onClick={() => setOpts((o) => ({ ...o, recover: !o.recover }))}
+                      title={recoverable ? 'Re-ink strokes a glare washed out (Docs / Clear)' : 'Switch to Docs or Clear first'}
+                    >
+                      <Icon name="text" size={16} /> <span>Recover<span className="hide-sm"> faded text</span></span>
+                      {opts.recover && recoverable && <Icon name="check" size={15} className="ctl-check" />}
+                    </button>
+                    <button
+                      className={`ctl-btn${showAdjust ? ' active' : ''}`}
+                      onClick={() => setShowAdjust((s) => !s)}
+                      title="Brightness, contrast, saturation"
+                    >
+                      <Icon name="sliders" size={16} /> <span>Fine adjust</span>
+                      {showAdjust && <Icon name="check" size={15} className="ctl-check" />}
                     </button>
                   </div>
-
-                  <button className="ctl-btn" onClick={() => setStage('crop')}>
-                    <Icon name="crop" size={16} /> Re-crop
-                  </button>
-                  <button
-                    className={`ctl-btn${opts.sharpen ? ' active' : ''}`}
-                    onClick={() => setOpts((o) => ({ ...o, sharpen: !o.sharpen }))}
-                    title="Crisp up slightly soft text and lines"
-                  >
-                    <Icon name="sparkle" size={16} /> Sharpen
-                    {opts.sharpen && <Icon name="check" size={15} className="ctl-check" />}
-                  </button>
-                  <button
-                    className={`ctl-btn${opts.recover ? ' active' : ''}`}
-                    disabled={!recoverable}
-                    onClick={() => setOpts((o) => ({ ...o, recover: !o.recover }))}
-                    title={recoverable ? 'Re-ink strokes a glare washed out (Docs / Clear)' : 'Switch to Docs or Clear first'}
-                  >
-                    <Icon name="text" size={16} /> Recover faded text
-                    {opts.recover && recoverable && <Icon name="check" size={15} className="ctl-check" />}
-                  </button>
-                  <button
-                    className={`ctl-btn${showAdjust ? ' active' : ''}`}
-                    onClick={() => setShowAdjust((s) => !s)}
-                  >
-                    <Icon name="sliders" size={16} /> Fine adjust
-                    {showAdjust && <Icon name="check" size={15} className="ctl-check" />}
-                  </button>
 
                   {showAdjust && (
                     <div className="enhance">
