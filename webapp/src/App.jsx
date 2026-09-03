@@ -159,6 +159,27 @@ export default function App() {
   const dragRef = useRef(null)
   const rafRef = useRef(0)
   const statusTimer = useRef(0)
+  const grayRef = useRef(null)   // low-res luminance of the current source, for edge-snap
+
+  /* small grayscale buffer of the source so the crop handles can snap to
+     real document edges as you drag (like a phone scanner app) */
+  useEffect(() => {
+    if (!work?.el) { grayRef.current = null; return }
+    try {
+      const GW = Math.min(760, work.w)
+      const s = GW / work.w
+      const w = Math.max(2, Math.round(work.w * s))
+      const h = Math.max(2, Math.round(work.h * s))
+      const c = document.createElement('canvas')
+      c.width = w; c.height = h
+      const cx = c.getContext('2d', { willReadFrequently: true })
+      cx.drawImage(work.el, 0, 0, w, h)
+      const d = cx.getImageData(0, 0, w, h).data
+      const g = new Float32Array(w * h)
+      for (let i = 0, j = 0; j < g.length; i += 4, j++) g[j] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+      grayRef.current = { g, w, h }
+    } catch { grayRef.current = null }
+  }, [work])
 
   /* ---- toast / status ---- */
   const toast = useCallback((text, kind = '') => {
@@ -312,26 +333,31 @@ export default function App() {
     ctx.fill('evenodd')
     ctx.restore()
 
+    const CROP = '#4ADE80'
     ctx.beginPath()
     ctx.moveTo(P[0][0], P[0][1])
     for (let i = 1; i < 4; i++) ctx.lineTo(P[i][0], P[i][1])
     ctx.closePath()
-    ctx.strokeStyle = '#6466E8'
-    ctx.lineWidth = 2
+    ctx.lineJoin = 'round'
+    ctx.strokeStyle = CROP
+    ctx.lineWidth = 9
     ctx.stroke()
 
-    ctx.fillStyle = '#6466E8'
     for (const [a, b] of EDGES) {
       const mx = (P[a][0] + P[b][0]) / 2
       const my = (P[a][1] + P[b][1]) / 2
-      ctx.fillRect(mx - 5.5, my - 5.5, 11, 11)
+      ctx.fillStyle = CROP
+      ctx.fillRect(mx - 8.5, my - 8.5, 17, 17)
+      ctx.lineWidth = 3
+      ctx.strokeStyle = '#fff'
+      ctx.strokeRect(mx - 8.5, my - 8.5, 17, 17)
     }
     for (const [x, y] of P) {
       ctx.beginPath()
-      ctx.arc(x, y, 7, 0, Math.PI * 2)
-      ctx.fillStyle = '#6466E8'
+      ctx.arc(x, y, 11, 0, Math.PI * 2)
+      ctx.fillStyle = CROP
       ctx.fill()
-      ctx.lineWidth = 2.5
+      ctx.lineWidth = 3.5
       ctx.strokeStyle = '#fff'
       ctx.stroke()
     }
@@ -367,6 +393,59 @@ export default function App() {
     }
     return null
   }
+  /* magnetic snap for a crop line dragged to `coord` (normalised).
+     axis 'y' = a horizontal edge (span is the x range), 'x' = vertical.
+     `ref` (optional) = the same line's position in the auto-detected quad.
+     1. look for a real page BOUNDARY in the image near `coord` and lock to it
+        — a boundary is one monotonic step between two regions of different
+        brightness, spanning most of the edge, so a page of text lines inside
+        the document doesn't pull the handle in.
+     2. otherwise, if we're close to the auto-detected edge, ease onto that.
+     3. otherwise free drag. */
+  const snapLine = (axis, coord, span0, span1, ref) => {
+    const G = grayRef.current
+    if (G) {
+      const { g, w, h } = G
+      const along = axis === 'y' ? w : h
+      const across = axis === 'y' ? h : w
+      const posPix = coord * across
+      const win = Math.max(6, Math.round(across * 0.03))
+      const pad = Math.max(3, Math.round(across * 0.012))   // how far out to read each side
+      const N = 22
+      const offs = []
+      let sgn = 0
+      for (let k = 0; k < N; k++) {
+        const t = span0 + (span1 - span0) * ((k + 0.5) / N)
+        const a = Math.round(t * along)
+        if (a < pad + 1 || a >= along - pad - 1) continue
+        let bestG = 0, bestOff = null
+        for (let o = -win; o <= win; o++) {
+          const c = Math.round(posPix + o)
+          if (c < pad + 1 || c >= across - pad - 1) continue
+          const hi = axis === 'y' ? (c + 1) * w + a : c * w + (a + 1)
+          const lo = axis === 'y' ? (c - 1) * w + a : c * w + (a - 1)
+          const grad = Math.abs(g[hi] - g[lo])
+          if (grad > bestG) { bestG = grad; bestOff = o }
+        }
+        if (bestOff == null || bestG < 20) continue
+        // is it a STEP between two regions (a real boundary), not a thin line?
+        const c = Math.round(posPix + bestOff)
+        const outer = axis === 'y' ? (c - pad) * w + a : c * w + (a - pad)
+        const inner = axis === 'y' ? (c + pad) * w + a : c * w + (a + pad)
+        const diff = g[inner] - g[outer]
+        if (Math.abs(diff) < 26) continue                   // both sides similar -> ignore (text, shading)
+        offs.push(bestOff); sgn += Math.sign(diff)
+      }
+      if (offs.length >= N * 0.6 && Math.abs(sgn) >= offs.length * 0.7) {
+        offs.sort((p, q) => p - q)
+        const spread = offs[Math.floor(offs.length * 0.85)] - offs[Math.floor(offs.length * 0.15)]
+        if (spread <= win * 0.55) return (posPix + offs[offs.length >> 1]) / across
+      }
+    }
+    if (ref != null && Math.abs(coord - ref) < 0.02) return ref
+    return coord
+  }
+
   const onDown = (e) => {
     const h = hit(...ptr(e))
     if (!h) return
@@ -379,11 +458,24 @@ export default function App() {
     setCorners((prev) => {
       const q = prev.map((p) => [...p])
       const { kind, idx } = dragRef.current
-      if (kind === 'corner') q[idx] = [nx, ny]
-      else {
+      const B = baseCorners
+      if (kind === 'corner') {
+        // snap each axis to a nearby edge line through the horizontal / vertical neighbour
+        const hN = [1, 0, 3, 2][idx], vN = [3, 2, 1, 0][idx]
+        const sy = snapLine('y', ny, Math.min(nx, q[hN][0]), Math.max(nx, q[hN][0]), B?.[idx]?.[1])
+        const sx = snapLine('x', nx, Math.min(ny, q[vN][1]), Math.max(ny, q[vN][1]), B?.[idx]?.[0])
+        q[idx] = [sx, sy]
+      } else {
         const [a, b, o] = EDGES[idx]
-        if (o === 'h') { q[a][1] = ny; q[b][1] = ny }
-        else { q[a][0] = nx; q[b][0] = nx }
+        if (o === 'h') {
+          const rf = B ? (B[a][1] + B[b][1]) / 2 : null
+          const y = snapLine('y', ny, Math.min(q[a][0], q[b][0]), Math.max(q[a][0], q[b][0]), rf)
+          q[a][1] = y; q[b][1] = y
+        } else {
+          const rf = B ? (B[a][0] + B[b][0]) / 2 : null
+          const x = snapLine('x', nx, Math.min(q[a][1], q[b][1]), Math.max(q[a][1], q[b][1]), rf)
+          q[a][0] = x; q[b][0] = x
+        }
       }
       return q
     })
