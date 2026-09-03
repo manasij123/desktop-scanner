@@ -783,6 +783,7 @@ export default function App() {
               <>
 
                 <aside className="controls">
+                  <div className="controls-scroll">
                   {docConf != null && docConf < 0.3 && !hintOff && (
                     <div className="doc-hint">
                       <div className="doc-hint-row">
@@ -907,18 +908,20 @@ export default function App() {
                     </>
                   )}
 
-                  <div className="controls-spacer" />
+                  </div>
 
-                  <label className="compare-chk">
-                    <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} />
-                    Compare with original
-                  </label>
-                  <button className="btn ghost block" onClick={saveJpg}>
-                    <Icon name="download" size={15} /> Save copy (JPG)
-                  </button>
-                  {editingId
-                    ? <button className="btn primary block glow" onClick={updatePage}><Icon name="check" size={16} /> Update page</button>
-                    : <button className="btn primary block glow" onClick={addToDocument}><Icon name="plus" size={16} /> Add to document</button>}
+                  <div className="controls-foot">
+                    <label className="compare-chk">
+                      <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} />
+                      Compare with original
+                    </label>
+                    <button className="btn ghost block" onClick={saveJpg}>
+                      <Icon name="download" size={15} /> Save copy (JPG)
+                    </button>
+                    {editingId
+                      ? <button className="btn primary block glow" onClick={updatePage}><Icon name="check" size={16} /> Update page</button>
+                      : <button className="btn primary block glow" onClick={addToDocument}><Icon name="plus" size={16} /> Add to document</button>}
+                  </div>
                 </aside>
               </>
             )}

@@ -287,9 +287,20 @@ svg { display: block; }
 
 /* ---- right controls panel ---- */
 .controls {
-  flex: 0 0 240px; min-height: 0; overflow-y: auto;
+  flex: 0 0 240px; min-height: 0; overflow: hidden;
   background: var(--glass); border: 1px solid var(--glass-line); border-radius: var(--radius-lg);
   box-shadow: var(--shadow-panel); padding: 14px; display: flex; flex-direction: column; gap: 9px;
+}
+/* only the settings scroll; the commit actions stay pinned at the bottom so
+   "Add to document" is always reachable without scrolling the panel */
+.controls-scroll {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 9px;
+  margin: -3px -6px 0; padding: 3px 6px 2px;
+}
+.controls-foot {
+  flex: 0 0 auto; display: flex; flex-direction: column; gap: 9px;
+  padding-top: 10px; margin-top: 2px; border-top: 1px solid var(--glass-line);
 }
 .seclabel { font-size: 10px; font-weight: 800; letter-spacing: 1.1px; color: var(--ink-soft); margin-top: 3px; }
 .controls-spacer { flex: 1 1 auto; min-height: 4px; }
