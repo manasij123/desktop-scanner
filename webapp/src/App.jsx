@@ -660,7 +660,9 @@ export default function App() {
       <div className="backdrop" ref={bgRef} />
 
       <nav className="rail">
-        <div className="rail-logo"><Icon name="scan" size={22} /></div>
+        <div className="rail-logo">
+          <img src={`${import.meta.env.BASE_URL}mark-white.svg`} alt="Desktop Scanner" width="26" height="26" />
+        </div>
         <button className="rail-btn primary" title="Add photos" onClick={pickFiles}>
           <Icon name="plus" size={20} />
         </button>
