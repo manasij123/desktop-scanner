@@ -14,6 +14,7 @@ const PATHS = {
   print: 'M7 9V4h10v5M7 17H5V9h14v8h-2M7 14h10v6H7z',
   download: 'M12 4v11M7 11l5 5 5-5M5 20h14',
   crop: 'M7 3v14h14M3 7h14v14',
+  camera: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z',
   info: 'M12 11v5M12 8h.01',
   image: 'M4 17l5-5 4 4 3-3 4 4',
   layers: 'M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5M3 17l9 5 9-5',
@@ -32,6 +33,7 @@ const EXTRA = {
   ),
   info: <circle cx="12" cy="12" r="9" />,
   image: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.6" /></>,
+  camera: <circle cx="12" cy="13" r="4" />,
 }
 
 export function Icon({ name, size = 18, strokeWidth = 1.9, ...rest }) {

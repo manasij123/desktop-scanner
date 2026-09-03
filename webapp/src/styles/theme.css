@@ -307,20 +307,20 @@ svg { display: block; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---- right controls panel ---- */
+/* ---- right controls panel: styles block on top, scrolling tools in the
+   middle, commit actions pinned so "Add to document" is always reachable ---- */
 .controls {
   flex: 0 0 240px; min-height: 0; overflow: hidden;
   background: var(--glass); border: 1px solid var(--glass-line); border-radius: var(--radius-lg);
   box-shadow: var(--shadow-panel); padding: 14px; display: flex; flex-direction: column; gap: 9px;
 }
-/* only the settings scroll; the commit actions stay pinned at the bottom so
-   "Add to document" is always reachable without scrolling the panel */
-.controls-scroll {
+.ctl-styles { flex: 0 0 auto; display: flex; flex-direction: column; gap: 9px; }
+.ctl-tools {
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
   display: flex; flex-direction: column; gap: 9px;
   margin: -3px -6px 0; padding: 3px 6px 2px;
 }
-.controls-foot {
+.ctl-actions {
   flex: 0 0 auto; display: flex; flex-direction: column; gap: 9px;
   padding-top: 10px; margin-top: 2px; border-top: 1px solid var(--glass-line);
 }
@@ -379,6 +379,10 @@ svg { display: block; }
 .ctl-btn:disabled { opacity: .45; cursor: not-allowed; }
 .ctl-btn .ctl-check { margin-left: auto; color: var(--accent); }
 
+/* rotate pair — two half-width buttons on one row */
+.ctl-rotate { display: flex; gap: 9px; }
+.ctl-rotate .ctl-btn { flex: 1 1 0; min-width: 0; justify-content: center; }
+
 /* enhance sliders */
 .enhance {
   background: rgba(255,255,255,0.42); border: 1px solid var(--edge-q); border-radius: var(--radius);
@@ -421,7 +425,8 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
 .statusbar .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); flex: none; }
 .statusbar .dot.busy { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
-.statusbar-spacer { flex: 1 1 auto; }
+.sb-msg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.statusbar-spacer { flex: 1 1 auto; min-width: 6px; }
 .statusbar-mode { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
 
 /* server connection status pill (bottom-right) */
@@ -482,11 +487,143 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
 @keyframes toastin { from { opacity: 0; transform: translateY(8px); } }
 
 /* ---------------------------------------------------------------- responsive */
-@media (max-width: 1080px) {
-  .pagelist { flex-basis: 168px; }
-  .controls { flex-basis: 210px; }
+/* .hide-sm — inline label text that collapses to icon-only on phones */
+
+/* laptops / small desktops — trim the side panels */
+@media (max-width: 1180px) {
+  .pagelist { flex-basis: 184px; }
+  .controls { flex-basis: 220px; }
+  .work { padding: 12px 16px 14px; gap: 12px; }
+  .topbar { padding: 14px 16px 10px; }
+  .hairline { margin: 0 16px; }
 }
-@media (max-width: 860px) {
+
+/* tablets (portrait) + big phones (landscape): stack the stage vertically,
+   PAGES becomes a horizontal filmstrip, controls a scrollable sheet below */
+@media (max-width: 960px) {
+  .work { flex-direction: column; }
+  .pagelist {
+    flex: 0 0 auto; flex-direction: column; max-height: 148px; padding: 9px 10px;
+  }
+  .pagelist-head { margin-bottom: 6px; }
+  .thumbs { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 0 0 4px; gap: 8px; }
+  .thumb { flex: 0 0 auto; max-width: 130px; }
+  .thumb img { height: 92px; width: auto; max-height: 92px; }
+  .thumb-empty { flex-direction: row; padding: 12px; font-size: 11.5px; }
+
   .stage { flex-direction: column; }
-  .controls { flex-basis: auto; max-height: 42vh; }
+  .controls { flex: 0 0 auto; max-height: min(46vh, 400px); }
+  .card canvas, .card img { max-width: calc(100% - 16px); max-height: calc(100% - 16px); }
+}
+
+/* phones */
+@media (max-width: 620px) {
+  #app { flex-direction: column-reverse; }
+
+  .rail {
+    flex: 0 0 auto; flex-direction: row; width: 100%; height: 56px;
+    padding: 0 14px calc(env(safe-area-inset-bottom) * .6); gap: 12px;
+    box-shadow: 0 -8px 24px -12px rgba(30, 20, 70, .35);
+  }
+  .rail-spacer { flex: 1 1 auto; }
+  .rail-logo { width: 40px; height: 40px; }
+  .rail-logo img { width: 26px; height: 26px; }
+  .rail-btn { width: 42px; height: 42px; }
+
+  .topbar { flex-wrap: wrap; gap: 8px 10px; padding: 12px 14px 8px; }
+  .page-title { font-size: 17px; letter-spacing: -0.2px; }
+  .page-sub { display: none; }
+  .topbar-spacer { display: none; }
+  .titles { flex: 1 1 100%; }
+  .srv-chip { order: 3; }
+  .ring-wrap { order: 4; }
+  .ring { width: 34px; height: 34px; }
+  .ring-cap { display: none; }
+  .topbar .btn { order: 5; padding: 8px 12px; font-size: 12px; }
+  .hide-sm { display: none; }
+
+  .hairline { margin: 0 14px; }
+  .work { padding: 10px 12px calc(10px + env(safe-area-inset-bottom) * .3); gap: 8px; overflow: hidden; }
+
+  .pagelist { max-height: 118px; border-radius: var(--radius); }
+  .pagelist[data-empty] { display: none; }   /* the bottom + button covers this */
+  .thumb img { height: 76px; max-height: 76px; }
+
+  /* ClearScanner-style mobile editor: a scan-style ribbon above the page, a
+     tool ribbon then the commit bar below. `display: contents` lifts the three
+     control blocks into the stage's column so `order` can place them. */
+  .controls { display: contents; }
+  .stage { min-height: 0; overflow: hidden; }
+  .stage-main { order: 0; flex: 1 1 auto; min-height: 150px; }
+  .card { border-radius: var(--radius); }
+  .card canvas, .card img { max-width: calc(100% - 10px); max-height: calc(100% - 10px); }
+
+  .ctl-styles {
+    order: -1; flex: 0 0 auto;
+    flex-direction: row; align-items: center; gap: 8px; overflow-x: auto;
+    padding: 7px 8px; margin: 0; border-radius: var(--radius);
+    background: var(--glass-hi); border: 1px solid var(--glass-line); box-shadow: var(--shadow-sm);
+    scrollbar-width: none;
+  }
+  .ctl-styles::-webkit-scrollbar { display: none; }
+  .ctl-styles > .seclabel, .ctl-styles > .mode-desc, .ctl-styles .doc-hint { display: none; }
+  .ctl-styles .segmented.vertical { flex: 0 0 auto; flex-direction: row; gap: 6px; }
+  .ctl-styles .seg-btn {
+    flex: 0 0 auto; flex-direction: column; align-items: center; gap: 4px;
+    min-width: 58px; padding: 7px 8px; font-size: 10px; border-radius: 10px;
+  }
+  .ctl-styles .seg-swatch { width: 18px; height: 18px; border-radius: 5px; }
+  .ctl-styles .pilltoggle { flex: 0 0 auto; margin-left: auto; }
+  .ctl-styles .pill-opt { padding: 8px 12px; }
+
+  .ctl-tools {
+    order: 1; flex: 0 0 auto; max-height: 30vh; overflow-y: auto; margin: 0;
+    flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 8px;
+    border-radius: var(--radius); background: var(--glass-hi);
+    border: 1px solid var(--glass-line); box-shadow: var(--shadow-sm);
+  }
+  .ctl-tools .hairline, .ctl-tools > .seclabel { display: none; }
+  .ctl-tools .ctl-rotate { display: contents; }
+  .ctl-tools .ctl-btn {
+    flex: 1 1 42%; flex-direction: column; gap: 5px; padding: 9px 6px;
+    justify-content: center; text-align: center; font-size: 10.5px; position: relative;
+  }
+  .ctl-tools .ctl-btn .ctl-check { position: absolute; top: 4px; right: 6px; }
+  .ctl-tools .enhance, .ctl-tools .ocr-select, .ctl-tools .ocr-out, .ctl-tools .btn.block { flex: 1 1 100%; }
+
+  .ctl-actions {
+    order: 2; flex: 0 0 auto; gap: 7px;
+    padding: 0; margin: 0; border: 0;
+  }
+  .ctl-actions .compare-chk { font-size: 11.5px; }
+
+  .cropbar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-radius: var(--radius); }
+  .cropbar .btn.ghost.sm { padding: 8px 10px; }
+
+  .iconbtn { width: 38px; height: 38px; }
+  .iconbtn.primary { width: 48px; height: 48px; }
+
+  .statusbar { padding: 0 14px; height: 26px; font-size: 10.5px; }
+  .srv-stat { font-size: 9px; padding: 2px 7px; }
+
+  .modal { padding: 16px; }
+  .modal-actions { flex-wrap: wrap; }
+  .modal-actions .btn { flex: 1 1 auto; }
+
+  .dropcard b { font-size: 14px; }
+}
+
+/* landscape phones — very little height */
+@media (max-height: 480px) and (orientation: landscape) {
+  #app { flex-direction: row; }
+  .rail { flex: 0 0 52px; flex-direction: column; width: auto; height: auto; padding: 10px 0; }
+  .rail-spacer { flex: 1 1 auto; }
+  .topbar { padding: 8px 14px 6px; }
+  .work { flex-direction: row; }
+  .pagelist { flex: 0 0 150px; flex-direction: column; max-height: none; }
+  .thumbs { flex-direction: column; overflow-x: hidden; overflow-y: auto; }
+  .thumb { max-width: none; }
+  .thumb img { height: auto; max-height: 130px; }
+  .stage { flex-direction: row; }
+  .controls { flex: 0 0 220px; max-height: none; }
 }

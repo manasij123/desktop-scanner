@@ -301,6 +301,17 @@ export default function App() {
     inp.click()
   }, [startFiles])
 
+  // phone: open the rear camera straight to a capture (falls back to a
+  // normal file dialog on a desktop browser, which is fine)
+  const captureFromCamera = useCallback(() => {
+    const inp = document.createElement('input')
+    inp.type = 'file'
+    inp.accept = 'image/*'
+    inp.capture = 'environment'
+    inp.onchange = () => inp.files.length && startFiles(inp.files)
+    inp.click()
+  }, [startFiles])
+
   /* ---- crop editor ----
      The image is drawn inset by a margin inside the canvas so every corner
      of the photo — even one right at its edge — sits away from the canvas
@@ -489,10 +500,16 @@ export default function App() {
     if (!work) return
     const rot = rotate90(work, dir)
     rot.fallback = work.fallback
+    rot.flat = work.flat
+    rot.conf = work.conf
     rot.file = useServer ? await srcToFile(rot.el) : work.file
     setWork(rot)
-    setCorners(rotateQuad(corners, dir))
-    setBaseCorners(rotateQuad(baseCorners, dir))
+    setCorners((c) => rotateQuad(c, dir))
+    setBaseCorners((c) => rotateQuad(c, dir))
+    // in the preview the WebGL engine holds the pre-rotation source; re-bind
+    // it so the live render picks up the new orientation (server path re-uploads
+    // rot.file on its own)
+    if (!useServer) engineRef.current?.setSource(rot.el, rot.w, rot.h)
   }
   const resetCorners = () => setCorners(baseCorners)
 
@@ -743,7 +760,7 @@ export default function App() {
       return editingId && activeIdx >= 0
         ? ['Review & export', `Page ${activeIdx + 1} of ${pages.length} — tune the look, then update`]
         : ['Review & export', 'Pick a look and fine-tune, then add the page to your document']
-    return ['Add a document', 'Drop a photo anywhere, or use the + button to get started']
+    return ['Add a document', 'Drop a photo anywhere, or use the photo / camera buttons to start']
   }, [stage, editingId, activeIdx, pages.length])
 
   /* ================================================================ render */
@@ -756,8 +773,11 @@ export default function App() {
         <div className="rail-logo">
           <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Desktop Scanner" />
         </div>
-        <button className="rail-btn primary" title="Add photos" onClick={pickFiles}>
-          <Icon name="plus" size={20} />
+        <button className="rail-btn primary" title="Add from photos" onClick={pickFiles}>
+          <Icon name="image" size={19} />
+        </button>
+        <button className="rail-btn" title="Take a photo" onClick={captureFromCamera}>
+          <Icon name="camera" size={19} />
         </button>
         <div className="rail-spacer" />
         <button
@@ -790,11 +810,11 @@ export default function App() {
               <span className="ring-cap">{busy ? 'WORKING' : 'PAGES'}</span>
             </div>
           )}
-          <button className="btn ghost" onClick={printDoc} disabled={!pages.length}>
-            <Icon name="print" size={16} /> Print
+          <button className="btn ghost" onClick={printDoc} disabled={!pages.length} title="Print">
+            <Icon name="print" size={16} /> <span className="hide-sm">Print</span>
           </button>
-          <button className="btn primary glow" onClick={exportPdf} disabled={!pages.length}>
-            <Icon name="download" size={16} /> Export PDF
+          <button className="btn primary glow" onClick={exportPdf} disabled={!pages.length} title="Export PDF">
+            <Icon name="download" size={16} /> <span className="hide-sm">Export </span>PDF
             {pages.length > 0 && <span className="btn-count">({pages.length})</span>}
           </button>
         </header>
@@ -857,8 +877,8 @@ export default function App() {
                   {busy && <div className="veil"><div className="spinner" />{busy}</div>}
                 </div>
                 <div className="cropbar">
-                  <button className="btn ghost sm" onClick={resetCorners}>
-                    <Icon name="reset" size={15} /> Reset to auto-detect
+                  <button className="btn ghost sm" onClick={resetCorners} title="Reset to auto-detect">
+                    <Icon name="reset" size={15} /> <span className="hide-sm">Reset to auto-detect</span>
                   </button>
                   <div className="cropbar-spacer" />
                   <button className="iconbtn" title="Rotate left" onClick={() => rotateSource(-1)}>
@@ -878,7 +898,7 @@ export default function App() {
               <>
 
                 <aside className="controls">
-                  <div className="controls-scroll">
+                  <div className="ctl-styles">
                   {docConf != null && docConf < 0.3 && !hintOff && (
                     <div className="doc-hint">
                       <div className="doc-hint-row">
@@ -930,8 +950,20 @@ export default function App() {
                       B&amp;W
                     </button>
                   </div>
+                  </div>
 
-                  <div className="hairline" />
+                  <div className="ctl-tools">
+                  <div className="hairline mob-hide" />
+
+                  <span className="seclabel">Rotate</span>
+                  <div className="ctl-rotate">
+                    <button className="ctl-btn" onClick={() => rotateSource(-1)} title="Rotate left">
+                      <Icon name="rotate-left" size={16} /> Left
+                    </button>
+                    <button className="ctl-btn" onClick={() => rotateSource(1)} title="Rotate right">
+                      <Icon name="rotate-right" size={16} /> Right
+                    </button>
+                  </div>
 
                   <button className="ctl-btn" onClick={() => setStage('crop')}>
                     <Icon name="crop" size={16} /> Re-crop
@@ -1005,7 +1037,7 @@ export default function App() {
 
                   </div>
 
-                  <div className="controls-foot">
+                  <div className="ctl-actions">
                     <label className="compare-chk">
                       <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} />
                       Compare with original
@@ -1025,7 +1057,7 @@ export default function App() {
 
         <div className="statusbar">
           <span className={`dot${busy ? ' busy' : ''}`} />
-          {busy || status}
+          <span className="sb-msg">{busy || status}</span>
           <span className="statusbar-spacer" />
           {checking ? (
             <span className="srv-stat">checking server…</span>
@@ -1184,7 +1216,7 @@ function Ring({ value, num, spinning }) {
 function PageList({ pages, editingId, onOpen, onRemove, onMove, onAdd }) {
   const drag = useRef(null)
   return (
-    <aside className="pagelist">
+    <aside className="pagelist" data-empty={pages.length === 0 ? '' : undefined}>
       <div className="pagelist-head">
         <span className="pagelist-title">{pages.length ? `PAGES · ${pages.length}` : 'PAGES'}</span>
         <div className="pagelist-tools">
@@ -1202,7 +1234,7 @@ function PageList({ pages, editingId, onOpen, onRemove, onMove, onAdd }) {
       {pages.length === 0 ? (
         <div className="thumb-empty">
           <Icon name="layers" size={26} />
-          No pages yet.<br />Add a photo with the + button.
+          No pages yet.<br />Add one with the button below.
         </div>
       ) : (
         <div className="thumbs">
