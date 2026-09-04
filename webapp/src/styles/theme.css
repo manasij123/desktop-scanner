@@ -125,7 +125,28 @@ svg { display: block; }
   from { transform: translate(-50%, -50%) rotate(0turn); }
   to   { transform: translate(-50%, -50%) rotate(1turn); }
 }
-@media (prefers-reduced-motion: reduce) { .rail-logo::before { animation: none; } }
+
+/* same rotating-ring mark, shown in the phone header instead of the bottom bar */
+.topbar-logo {
+  display: none; position: relative; flex: 0 0 auto;
+  width: 34px; height: 34px; border-radius: 11px;
+  place-items: center; overflow: hidden; isolation: isolate;
+}
+.topbar-logo::before {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  width: 150%; aspect-ratio: 1; z-index: 0;
+  background: conic-gradient(#93A3F4, #FBEFA0, #FFAE83, #FBEFA0, #93A3F4);
+  transform: translate(-50%, -50%); animation: rail-spin 3.2s linear infinite;
+}
+.topbar-logo::after {
+  content: ''; position: absolute; inset: 2.5px; border-radius: 9px;
+  background: #fff; z-index: 1;
+}
+.topbar-logo img { position: relative; z-index: 2; display: block; width: 22px; height: 22px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-logo::before, .topbar-logo::before { animation: none; }
+}
 .rail-btn {
   width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
   color: #fff; border: 1px solid transparent; transition: background .15s var(--ease);
@@ -540,15 +561,16 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
     box-shadow: 0 -8px 24px -12px rgba(30, 20, 70, .35);
   }
   .rail-spacer { flex: 1 1 auto; }
-  .rail-logo { width: 40px; height: 40px; }
-  .rail-logo img { width: 26px; height: 26px; }
+  .rail-logo { display: none; }   /* the mark moves up into the header on phones */
   .rail-btn { width: 42px; height: 42px; }
 
-  .topbar { flex-wrap: wrap; gap: 8px 10px; padding: 12px 14px 8px; }
+  .topbar { position: relative; flex-wrap: wrap; gap: 8px 10px; padding: 12px 14px 8px; }
   .page-title { font-size: 17px; letter-spacing: -0.2px; }
   .page-sub { display: none; }
   .topbar-spacer { display: none; }
-  .titles { flex: 1 1 100%; order: 1; }
+  .titles { flex: 1 1 100%; order: 1; padding-right: 44px; }
+  /* the mark, pinned to the top-right corner of the header */
+  .topbar-logo { display: grid; position: absolute; top: 9px; right: 14px; }
   .srv-chip { order: 2; }
   .ring-wrap { order: 3; }
   .ring { width: 34px; height: 34px; }
@@ -677,6 +699,8 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
   #app { flex-direction: row; }
   .rail { flex: 0 0 52px; flex-direction: column; width: auto; height: auto; padding: 10px 0; }
   .rail-spacer { flex: 1 1 auto; }
+  .rail-logo { display: grid; }   /* back in the side rail when it's on the left */
+  .topbar-logo { display: none; }
   .topbar { padding: 8px 14px 6px; }
   .work { flex-direction: row; }
   .pagelist { flex: 0 0 150px; flex-direction: column; max-height: none; }

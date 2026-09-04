@@ -797,6 +797,9 @@ export default function App() {
             <span className="page-title">{title[0]}</span>
             <span className="page-sub">{title[1]}</span>
           </div>
+          <div className="topbar-logo" aria-hidden="true">
+            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" />
+          </div>
           <div className="topbar-spacer" />
           {stage === 'preview' && (
             <div className="topbar-actions">
