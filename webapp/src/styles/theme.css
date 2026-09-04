@@ -553,12 +553,12 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
   .ring-wrap { order: 3; }
   .ring { width: 34px; height: 34px; }
   .ring-cap { display: none; }
-  .topbar .btn { padding: 8px 12px; font-size: 12px; }
+  .topbar .btn { padding: 7px 11px; font-size: 12px; }
   .topbar > .btn { order: 4; }
-  /* Save / Add — its own row right under the title, Add as the wide CTA */
-  .topbar-actions { order: 5; display: flex; flex: 1 1 100%; gap: 8px; }
-  .topbar-actions .btn { justify-content: center; }
-  .topbar-actions .btn.primary { flex: 1 1 auto; }
+  /* Add / JPG sit inline right after PDF — compact, not a full-width bar */
+  .topbar-actions { display: contents; }
+  .topbar-actions .btn { flex: 0 0 auto; order: 5; }
+  .topbar-actions .btn.ghost { order: 6; padding: 7px 9px; }
   .hide-sm { display: none; }
 
   .hairline { margin: 0 14px; }
@@ -604,25 +604,26 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
 
   .ctl-tools {
     order: 1; flex: 0 0 auto; margin: 0;
-    flex-direction: column; gap: 8px; padding: 8px;
+    flex-direction: column; gap: 6px; padding: 6px;
     border-radius: var(--radius); background: var(--glass-hi);
     border: 1px solid var(--glass-line); box-shadow: var(--shadow-sm);
   }
   .ctl-tools .hairline, .ctl-tools > .seclabel { display: none; }
 
-  /* tools in a 4-up grid: rotate ×2, re-crop, sharpen / recover, adjust, ocr */
+  /* tools in a tight 4-up grid: rotate ×2, re-crop, sharpen / recover, adjust, ocr */
   .ctl-ribbon {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
   }
   .ctl-rotate { display: contents; }
   .ctl-ribbon .ctl-btn {
     width: auto; min-width: 0; margin: 0;
-    flex-direction: column; gap: 4px; padding: 9px 4px;
-    justify-content: center; text-align: center; font-size: 10px; line-height: 1.2;
-    position: relative;
+    flex-direction: column; gap: 2px; padding: 4px 2px;
+    justify-content: center; text-align: center; font-size: 8.5px; line-height: 1.1;
+    letter-spacing: -0.1px; position: relative;
   }
-  .ctl-ribbon .ctl-btn > svg:first-child { flex: none; }
-  .ctl-ribbon .ctl-btn .ctl-check { position: absolute; top: 3px; right: 5px; margin: 0; }
+  .ctl-ribbon .ctl-btn > svg:first-child { flex: none; width: 14px; height: 14px; }
+  .ctl-ribbon .ctl-btn .ctl-check { position: absolute; top: 2px; right: 2px; margin: 0; }
+  .ctl-ribbon .ctl-btn .ctl-check svg { width: 11px; height: 11px; }
 
   .ctl-tools .ocr-select, .ctl-tools .ocr-out, .ctl-tools .btn.block { width: 100%; }
 
