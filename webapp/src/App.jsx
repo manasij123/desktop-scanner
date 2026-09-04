@@ -128,6 +128,7 @@ export default function App() {
   const [editingId, setEditingId] = useState(null)
   const [compare, setCompare] = useState(false)
   const [showAdjust, setShowAdjust] = useState(false)
+  const [showOcr, setShowOcr] = useState(false)
   const [docConf, setDocConf] = useState(null)   // 0..1 "looks like a document"
   const [hintOff, setHintOff] = useState(false)  // "not a document" banner dismissed
 
@@ -270,6 +271,7 @@ export default function App() {
         recover: false, sharpen: false, brightness: 0, contrast: 0, saturation: 0,
       }))
       setShowAdjust(false)
+      setShowOcr(false)
       setStage('crop')
       say('Drag the corners to match the page, then confirm', true)
     } catch (e) {
@@ -796,6 +798,20 @@ export default function App() {
             <span className="page-sub">{title[1]}</span>
           </div>
           <div className="topbar-spacer" />
+          {stage === 'preview' && (
+            <div className="topbar-actions">
+              <button className="btn ghost" onClick={saveJpg} title="Save a JPG copy">
+                <Icon name="download" size={15} /> <span className="hide-sm">Save </span>JPG
+              </button>
+              {editingId
+                ? <button className="btn primary glow" onClick={updatePage} title="Update this page">
+                    <Icon name="check" size={15} /> Update
+                  </button>
+                : <button className="btn primary glow" onClick={addToDocument} title="Add to document">
+                    <Icon name="plus" size={15} /> Add
+                  </button>}
+            </div>
+          )}
           <button
             className={`srv-chip${useServer ? ' on' : ''}`}
             onClick={() => setShowSettings(true)}
@@ -988,53 +1004,80 @@ export default function App() {
                     </button>
                     <button
                       className={`ctl-btn${showAdjust ? ' active' : ''}`}
-                      onClick={() => setShowAdjust((s) => !s)}
+                      onClick={() => { setShowAdjust((s) => !s); setShowOcr(false) }}
                       title="Brightness, contrast, saturation"
                     >
                       <Icon name="sliders" size={16} /> <span>Fine adjust</span>
                       {showAdjust && <Icon name="check" size={15} className="ctl-check" />}
                     </button>
+                    <button
+                      className={`ctl-btn${showOcr ? ' active' : ''}`}
+                      onClick={() => { setShowOcr((s) => !s); setShowAdjust(false) }}
+                      title="Extract text (OCR)"
+                    >
+                      <Icon name="text" size={16} /> <span>OCR</span>
+                      {showOcr && <Icon name="check" size={15} className="ctl-check" />}
+                    </button>
                   </div>
 
                   {showAdjust && (
-                    <div className="enhance">
-                      <div className="enhance-head">
-                        <span className="seclabel" style={{ marginTop: 0 }}>Brightness · Contrast{!opts.bw ? ' · Saturation' : ''}</span>
-                        <button
-                          className="iconbtn sm"
-                          style={{ marginLeft: 'auto' }}
-                          title="Reset adjustments"
-                          onClick={() => setOpts((o) => ({ ...o, brightness: 0, contrast: 0, saturation: 0 }))}
-                        >
-                          <Icon name="reset" size={13} />
-                        </button>
+                    <>
+                      <div className="sheet-scrim" onClick={() => setShowAdjust(false)} />
+                      <div className="ctl-sheet">
+                        <div className="sheet-head">
+                          <span className="sheet-grip" />
+                          <div className="sheet-head-actions">
+                            <button
+                              className="iconbtn sm"
+                              title="Reset adjustments"
+                              onClick={() => setOpts((o) => ({ ...o, brightness: 0, contrast: 0, saturation: 0 }))}
+                            >
+                              <Icon name="reset" size={13} />
+                            </button>
+                            <button className="iconbtn sm" title="Done" onClick={() => setShowAdjust(false)}>
+                              <Icon name="x" size={13} />
+                            </button>
+                          </div>
+                        </div>
+                        <Slider label="Brightness" value={opts.brightness} onChange={(v) => setOpts((o) => ({ ...o, brightness: v }))} />
+                        <Slider label="Contrast" value={opts.contrast} onChange={(v) => setOpts((o) => ({ ...o, contrast: v }))} />
+                        {!opts.bw && (
+                          <Slider label="Saturation" value={opts.saturation} onChange={(v) => setOpts((o) => ({ ...o, saturation: v }))} />
+                        )}
                       </div>
-                      <Slider label="Brightness" value={opts.brightness} onChange={(v) => setOpts((o) => ({ ...o, brightness: v }))} />
-                      <Slider label="Contrast" value={opts.contrast} onChange={(v) => setOpts((o) => ({ ...o, contrast: v }))} />
-                      {!opts.bw && (
-                        <Slider label="Saturation" value={opts.saturation} onChange={(v) => setOpts((o) => ({ ...o, saturation: v }))} />
-                      )}
-                    </div>
+                    </>
                   )}
 
-                  <div className="hairline" />
-
-                  <span className="seclabel">Text (OCR)</span>
-                  <select className="ocr-select" value={ocrLang} onChange={(e) => setOcrLang(e.target.value)}>
-                    {OCR_LANGS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                  <button className="ctl-btn" onClick={runOcr} disabled={ocrBusy}>
-                    <Icon name="text" size={16} /> {ocrBusy ? 'Reading…' : 'Extract text'}
-                  </button>
-                  {ocrText && (
+                  {showOcr && (
                     <>
-                      <div className="ocr-out">{ocrText}</div>
-                      <button
-                        className="btn ghost sm block"
-                        onClick={() => { navigator.clipboard?.writeText(ocrText); toast('Copied', 'good') }}
-                      >
-                        <Icon name="download" size={13} /> Copy text
-                      </button>
+                      <div className="sheet-scrim" onClick={() => setShowOcr(false)} />
+                      <div className="ctl-sheet">
+                        <div className="sheet-head">
+                          <span className="sheet-grip" />
+                          <div className="sheet-head-actions">
+                            <button className="iconbtn sm" title="Done" onClick={() => setShowOcr(false)}>
+                              <Icon name="x" size={13} />
+                            </button>
+                          </div>
+                        </div>
+                        <select className="ocr-select" value={ocrLang} onChange={(e) => setOcrLang(e.target.value)}>
+                          {OCR_LANGS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                        <button className="btn primary block" onClick={runOcr} disabled={ocrBusy}>
+                          <Icon name="text" size={15} /> {ocrBusy ? 'Reading…' : 'Extract text'}
+                        </button>
+                        {ocrText && (
+                          <>
+                            <div className="ocr-out">{ocrText}</div>
+                            <button
+                              className="btn ghost sm block"
+                              onClick={() => { navigator.clipboard?.writeText(ocrText); toast('Copied', 'good') }}
+                            >
+                              <Icon name="download" size={13} /> Copy text
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </>
                   )}
 

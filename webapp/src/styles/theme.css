@@ -147,6 +147,8 @@ svg { display: block; }
 .page-title { font-size: 21px; font-weight: 800; letter-spacing: -0.4px; }
 .page-sub { font-size: 12px; color: var(--muted); font-weight: 500; }
 .topbar-spacer { flex: 1 1 auto; }
+/* preview-mode Save / Add cluster — only surfaces in the phone header */
+.topbar-actions { display: none; }
 
 .ring-wrap { display: flex; align-items: center; gap: 8px; }
 .ring { width: 42px; height: 42px; position: relative; flex: none; }
@@ -385,12 +387,16 @@ svg { display: block; }
 .ctl-rotate { display: flex; gap: 9px; }
 .ctl-rotate .ctl-btn { flex: 1 1 0; min-width: 0; justify-content: center; }
 
-/* enhance sliders */
-.enhance {
-  background: rgba(255,255,255,0.42); border: 1px solid var(--edge-q); border-radius: var(--radius);
-  padding: 10px 11px; display: flex; flex-direction: column; gap: 8px;
+/* Fine adjust / OCR panel — inline on desktop, a sheet that rises from the
+   bottom edge on phones (see the phone media query) */
+.ctl-sheet {
+  background: rgba(255,255,255,0.5); border: 1px solid var(--edge-q); border-radius: var(--radius);
+  padding: 9px 11px 11px; display: flex; flex-direction: column; gap: 8px;
 }
-.enhance-head { display: flex; align-items: center; }
+.sheet-head { display: flex; align-items: center; min-height: 20px; }
+.sheet-head-actions { margin-left: auto; display: flex; gap: 4px; }
+.sheet-grip { display: none; }
+.sheet-scrim { display: none; }
 .slider-row { display: grid; grid-template-columns: 62px minmax(0, 1fr) 30px; align-items: center; gap: 8px; }
 input.slider { width: 100%; }
 .slider-label { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; }
@@ -536,12 +542,17 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
   .page-title { font-size: 17px; letter-spacing: -0.2px; }
   .page-sub { display: none; }
   .topbar-spacer { display: none; }
-  .titles { flex: 1 1 100%; }
-  .srv-chip { order: 3; }
-  .ring-wrap { order: 4; }
+  .titles { flex: 1 1 100%; order: 1; }
+  .srv-chip { order: 2; }
+  .ring-wrap { order: 3; }
   .ring { width: 34px; height: 34px; }
   .ring-cap { display: none; }
-  .topbar .btn { order: 5; padding: 8px 12px; font-size: 12px; }
+  .topbar .btn { padding: 8px 12px; font-size: 12px; }
+  .topbar > .btn { order: 4; }
+  /* Save / Add — its own row right under the title, Add as the wide CTA */
+  .topbar-actions { order: 5; display: flex; flex: 1 1 100%; gap: 8px; }
+  .topbar-actions .btn { justify-content: center; }
+  .topbar-actions .btn.primary { flex: 1 1 auto; }
   .hide-sm { display: none; }
 
   .hairline { margin: 0 14px; }
@@ -551,12 +562,12 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
   .pagelist[data-empty] { display: none; }   /* the bottom + button covers this */
   .thumb img { height: 76px; max-height: 76px; }
 
-  /* ClearScanner-style mobile editor: a scan-style ribbon above the page, a
-     tool ribbon then the commit bar below. `display: contents` lifts the three
-     control blocks into the stage's column so `order` can place them. */
+  /* ClearScanner-style mobile editor: a big preview, a scan-style ribbon
+     above it, a 4-up tool grid below. `display: contents` lifts the control
+     blocks into the stage's column so `order` can place them. */
   .controls { display: contents; }
-  .stage { min-height: 0; overflow: hidden; }
-  .stage-main { order: 0; flex: 1 1 auto; min-height: 150px; }
+  .stage { min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+  .stage-main { order: 0; flex: 0 0 auto; min-height: 44vh; }
   .card { border-radius: var(--radius); }
   .card canvas, .card img { max-width: calc(100% - 10px); max-height: calc(100% - 10px); }
 
@@ -585,36 +596,55 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
   .ctl-styles .pill-opt { padding: 6px 9px; font-size: 10.5px; }
 
   .ctl-tools {
-    order: 1; flex: 0 0 auto; max-height: 34vh; overflow-y: auto; margin: 0;
+    order: 1; flex: 0 0 auto; margin: 0;
     flex-direction: column; gap: 8px; padding: 8px;
     border-radius: var(--radius); background: var(--glass-hi);
     border: 1px solid var(--glass-line); box-shadow: var(--shadow-sm);
   }
   .ctl-tools .hairline, .ctl-tools > .seclabel { display: none; }
 
-  /* tools sit shoulder-to-shoulder in one sideways-scrolling ribbon */
+  /* tools in a 4-up grid: rotate ×2, re-crop, sharpen / recover, adjust, ocr */
   .ctl-ribbon {
-    flex-direction: row; flex-wrap: nowrap; gap: 5px;
-    overflow-x: auto; scrollbar-width: none; margin: 0 -2px; padding: 2px;
-    scroll-snap-type: x proximity;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
   }
-  .ctl-ribbon::-webkit-scrollbar { display: none; }
   .ctl-rotate { display: contents; }
   .ctl-ribbon .ctl-btn {
-    flex: 0 0 auto; width: auto; min-width: 58px;
-    flex-direction: column; gap: 4px; padding: 8px 6px;
-    justify-content: center; text-align: center; font-size: 10px; position: relative;
-    scroll-snap-align: start;
+    width: auto; min-width: 0; margin: 0;
+    flex-direction: column; gap: 4px; padding: 9px 4px;
+    justify-content: center; text-align: center; font-size: 10px; line-height: 1.2;
+    position: relative;
   }
   .ctl-ribbon .ctl-btn > svg:first-child { flex: none; }
   .ctl-ribbon .ctl-btn .ctl-check { position: absolute; top: 3px; right: 5px; margin: 0; }
 
-  .ctl-tools .enhance, .ctl-tools .ocr-select, .ctl-tools .ocr-out, .ctl-tools .btn.block { width: 100%; }
+  .ctl-tools .ocr-select, .ctl-tools .ocr-out, .ctl-tools .btn.block { width: 100%; }
+
+  /* bottom sheet: Fine adjust / OCR slide up from the bottom edge */
+  .sheet-scrim {
+    display: block; position: fixed; inset: 0; z-index: 55;
+    background: rgba(26, 19, 52, 0.28); animation: fade .18s var(--ease);
+  }
+  .ctl-sheet {
+    position: fixed; left: 10px; right: 10px; z-index: 60;
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    max-height: 58vh; overflow-y: auto;
+    border-radius: 18px; padding: 8px 14px 14px;
+    background: var(--surface); border: 1px solid var(--glass-line);
+    box-shadow: 0 -18px 50px -10px rgba(26, 19, 52, 0.5);
+    animation: sheet-up .26s var(--ease);
+  }
+  .ctl-sheet .sheet-head { position: relative; min-height: 24px; padding-top: 8px; }
+  .sheet-grip {
+    display: block; position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
+    width: 36px; height: 4px; border-radius: 2px; background: var(--edge-strong);
+  }
+  @keyframes sheet-up { from { transform: translateY(24px); opacity: 0; } }
 
   .ctl-actions {
     order: 2; flex: 0 0 auto; gap: 7px;
-    padding: 0; margin: 0; border: 0;
+    padding: 2px 2px 0; margin: 0; border: 0;
   }
+  .ctl-actions .btn { display: none; }   /* Save / Add live in the header now */
   .ctl-actions .compare-chk { font-size: 11.5px; }
 
   .cropbar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-radius: var(--radius); }
