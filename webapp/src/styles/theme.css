@@ -664,7 +664,11 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
      blocks into the stage's column so `order` can place them. */
   .controls { display: contents; }
   .stage { min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
-  .stage-main { order: 0; flex: 0 0 auto; min-height: 44vh; }
+  /* flex: 1 1 (not 0 0) so this fills whatever's left in .stage — in preview
+     that's "at least 44vh, more if the tool grid below doesn't need it"; in
+     crop, where it's the only child, that's the entire stage instead of a
+     fixed 44vh island with dead space under the cropbar */
+  .stage-main { order: 0; flex: 1 1 auto; min-height: 44vh; }
   .card { border-radius: var(--radius); }
   .card canvas, .card img { max-width: calc(100% - 10px); max-height: calc(100% - 10px); }
 
