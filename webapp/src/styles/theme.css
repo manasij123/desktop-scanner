@@ -564,23 +564,23 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
   .rail-logo { display: none; }   /* the mark moves up into the header on phones */
   .rail-btn { width: 42px; height: 42px; }
 
-  .topbar { position: relative; flex-wrap: wrap; gap: 8px 10px; padding: 12px 14px 8px; }
+  .topbar { position: relative; flex-wrap: wrap; gap: 8px 7px; padding: 12px 14px 8px; }
   .page-title { font-size: 17px; letter-spacing: -0.2px; }
   .page-sub { display: none; }
   .topbar-spacer { display: none; }
   .titles { flex: 1 1 100%; order: 1; padding-right: 44px; }
   /* the mark, pinned to the top-right corner of the header */
   .topbar-logo { display: grid; position: absolute; top: 9px; right: 14px; }
-  .srv-chip { order: 2; }
+  .srv-chip { order: 2; padding: 5px 9px; font-size: 10.5px; gap: 5px; }
   .ring-wrap { order: 3; }
   .ring { width: 34px; height: 34px; }
   .ring-cap { display: none; }
-  .topbar .btn { padding: 7px 11px; font-size: 12px; }
+  .topbar .btn { padding: 6px 9px; font-size: 11.5px; }
   .topbar > .btn { order: 4; }
-  /* Add / JPG sit inline right after PDF — compact, not a full-width bar */
+  /* PDF · Add · JPG all on one line, compact */
   .topbar-actions { display: contents; }
   .topbar-actions .btn { flex: 0 0 auto; order: 5; }
-  .topbar-actions .btn.ghost { order: 6; padding: 7px 9px; }
+  .topbar-actions .btn.ghost { order: 6; padding: 6px 8px; }
   .hide-sm { display: none; }
 
   .hairline { margin: 0 14px; }
@@ -632,9 +632,10 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
   }
   .ctl-tools .hairline, .ctl-tools > .seclabel { display: none; }
 
-  /* tools in a tight 4-up grid: rotate ×2, re-crop, sharpen / recover, adjust, ocr */
+  /* tools in a tight 4-up grid of narrow tiles, centred */
   .ctl-ribbon {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+    display: grid; grid-template-columns: repeat(4, 64px);
+    justify-content: center; gap: 6px;
   }
   .ctl-rotate { display: contents; }
   .ctl-ribbon .ctl-btn {
