@@ -216,6 +216,11 @@ export default function App() {
   const [checking, setChecking] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showConnHelp, setShowConnHelp] = useState(false)
+
+  // ---- batch import (pick several photos -> one style dialog -> step through crop) ----
+  const [showBatchDialog, setShowBatchDialog] = useState(false)
+  const [batchPending, setBatchPending] = useState(null) // File[] awaiting the dialog
+  const [batchInfo, setBatchInfo] = useState(null)       // { index, total } while a batch is running
   const [srvPreview, setSrvPreview] = useState(null) // object URL of the server-rendered preview
   const [srvBusy, setSrvBusy] = useState(false)
   const useServer = !!(serverInfo && serverInfo.ok && apiUrl)
@@ -225,6 +230,7 @@ export default function App() {
   const engineRef = useRef(null)
   const bgRef = useRef(null)
   const queueRef = useRef([])
+  const batchRef = useRef(null)  // { border, mode, bw, index, total } while a batch is running
   const dragRef = useRef(null)
   const rafRef = useRef(0)
   const statusTimer = useRef(0)
@@ -339,6 +345,13 @@ export default function App() {
         }
       }
       src.conf = conf
+      const batch = batchRef.current
+      const finalOpts = {
+        ...DEFAULT_OPTS,
+        mode: batch ? batch.mode : smartMode(conf, src.flat),
+        bw: batch ? batch.bw : false,
+        recover: false, sharpen: false, brightness: 0, contrast: 0, saturation: 0,
+      }
       setWork(src)
       setCorners(quad)
       setBaseCorners(quad)
@@ -346,14 +359,22 @@ export default function App() {
       setDocConf(conf)
       setHintOff(false)
       setSrvPreview((u) => { if (u) URL.revokeObjectURL(u); return null })
-      setOpts((o) => ({
-        ...o, mode: smartMode(conf, src.flat),
-        recover: false, sharpen: false, brightness: 0, contrast: 0, saturation: 0,
-      }))
+      setOpts(finalOpts)
       setShowAdjust(false)
       setShowOcr(false)
+
+      if (batch && !batch.border) {
+        // "Border adjustment" off: skip the review screen, commit the
+        // detected crop straight away and move on to the next queued photo
+        setStage('preview')
+        say(`Adding page ${batch.index} of ${batch.total}…`, true)
+        await commitBatchPage(src, quad, finalOpts)
+        return
+      }
       setStage('crop')
-      say('Drag the corners to match the page, then confirm', true)
+      say(batch
+        ? `Page ${batch.index} of ${batch.total} — drag the corners, then confirm`
+        : 'Drag the corners to match the page, then confirm', true)
     } catch (e) {
       toast(e.message || 'Could not open that image', 'error')
     } finally {
@@ -364,13 +385,39 @@ export default function App() {
   const startFiles = useCallback((fileList) => {
     const files = [...fileList].filter((f) => f.type.startsWith('image/'))
     if (!files.length) { toast('Pick a PNG, JPEG or WebP image', 'error'); return }
-    queueRef.current = files.slice(1)
+    if (files.length > 1) {
+      setBatchPending(files)
+      setShowBatchDialog(true)
+      return
+    }
+    batchRef.current = null
+    setBatchInfo(null)
+    queueRef.current = []
     beginSource(files[0])
   }, [toast, beginSource])
 
+  const startBatch = useCallback((settings) => {
+    const files = batchPending
+    setShowBatchDialog(false)
+    setBatchPending(null)
+    if (!files || !files.length) return
+    batchRef.current = { ...settings, index: 1, total: files.length }
+    setBatchInfo({ index: 1, total: files.length })
+    queueRef.current = files.slice(1)
+    beginSource(files[0])
+  }, [batchPending, beginSource])
+
   const nextQueued = useCallback(() => {
     const f = queueRef.current.shift()
-    if (f) { beginSource(f); return true }
+    if (f) {
+      if (batchRef.current) {
+        batchRef.current = { ...batchRef.current, index: batchRef.current.index + 1 }
+        setBatchInfo({ index: batchRef.current.index, total: batchRef.current.total })
+      }
+      beginSource(f)
+      return true
+    }
+    if (batchRef.current) { batchRef.current = null; setBatchInfo(null) }
     return false
   }, [beginSource])
 
@@ -566,15 +613,23 @@ export default function App() {
         const sx = snapLine('x', nx, Math.min(ny, q[vN][1]), Math.max(ny, q[vN][1]), B?.[idx]?.[0])
         q[idx] = [sx, sy]
       } else {
+        // Translate the edge (keep the offset between its two corners) rather
+        // than snapping both to one shared coordinate — a perspective shot's
+        // top/bottom edge is rarely level, and flattening it there would
+        // undo the auto-detected skew every time this handle is touched.
         const [a, b, o] = EDGES[idx]
         if (o === 'h') {
           const rf = B ? (B[a][1] + B[b][1]) / 2 : null
-          const y = snapLine('y', ny, Math.min(q[a][0], q[b][0]), Math.max(q[a][0], q[b][0]), rf)
-          q[a][1] = y; q[b][1] = y
+          const target = snapLine('y', ny, Math.min(q[a][0], q[b][0]), Math.max(q[a][0], q[b][0]), rf)
+          const dy = target - (q[a][1] + q[b][1]) / 2
+          q[a][1] = Math.max(0, Math.min(1, q[a][1] + dy))
+          q[b][1] = Math.max(0, Math.min(1, q[b][1] + dy))
         } else {
           const rf = B ? (B[a][0] + B[b][0]) / 2 : null
-          const x = snapLine('x', nx, Math.min(q[a][1], q[b][1]), Math.max(q[a][1], q[b][1]), rf)
-          q[a][0] = x; q[b][0] = x
+          const target = snapLine('x', nx, Math.min(q[a][1], q[b][1]), Math.max(q[a][1], q[b][1]), rf)
+          const dx = target - (q[a][0] + q[b][0]) / 2
+          q[a][0] = Math.max(0, Math.min(1, q[a][0] + dx))
+          q[b][0] = Math.max(0, Math.min(1, q[b][0] + dx))
         }
       }
       return q
@@ -602,12 +657,19 @@ export default function App() {
   }
   const resetCorners = () => setCorners(baseCorners)
 
-  const confirmCrop = () => {
+  const confirmCrop = async () => {
     if (!work) return
     if (!useServer) {
       const eng = engine()
       if (!eng) return
       eng.setSource(work.el, work.w, work.h)
+    }
+    if (batchRef.current) {
+      // batch import with "Border adjustment" on: confirming a page's crop
+      // commits it immediately and steps straight to the next page's crop —
+      // there's no per-page style screen since the batch dialog already set it
+      await commitBatchPage(work, corners, opts)
+      return
     }
     setStage('preview')
     say(editingId ? 'Adjust the look, then update the page' : 'Pick a look, then add the page')
@@ -675,6 +737,35 @@ export default function App() {
       w: info.width || eng?.canvas.width || 0, h: info.height || eng?.canvas.height || 0,
       components: info.components || 3,
       src, corners: quad, opts: o,
+    }
+  }
+
+  // shared by both batch paths: "Border adjustment" off (called from beginSource
+  // with the just-detected src/quad) and on (called from confirmCrop with the
+  // user-adjusted work/corners) — grades the page, adds it, and steps to the
+  // next queued photo, landing on the grid (phone) / last page (desktop) when done
+  const commitBatchPage = async (src, quad, o) => {
+    if (!useServer) {
+      const eng = engine()
+      if (eng) eng.setSource(src.el, src.w, src.h)
+    }
+    setBusy('Rendering page…')
+    try {
+      const pg = await gradePage(src, quad, o)
+      const id = uid()
+      const idx = batchRef.current?.index
+      setPages((p) => [...p, { id, ...pg }])
+      setEditingId(id)
+      toast(idx ? `Added page ${idx}` : 'Added page', 'good')
+      if (!nextQueued()) {
+        if (onPhone()) showGallery()
+        else { setStage('preview'); say('Batch imported — review the pages') }
+      }
+    } catch (e) {
+      toast(e.message || 'Could not render that page', 'error')
+      if (!nextQueued() && onPhone()) showGallery()
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -857,13 +948,18 @@ export default function App() {
   const activeIdx = editingId ? pages.findIndex((p) => p.id === editingId) : -1
   const recoverable = opts.mode === 'docs' || opts.mode === 'clear'
   const title = useMemo(() => {
-    if (stage === 'crop') return ['Adjust the edges', 'Drag the corners to match the document, then confirm']
-    if (stage === 'preview')
+    if (stage === 'crop') {
+      if (batchInfo) return [`Page ${batchInfo.index} of ${batchInfo.total}`, 'Drag the corners to match the page, then confirm']
+      return ['Adjust the edges', 'Drag the corners to match the document, then confirm']
+    }
+    if (stage === 'preview') {
+      if (batchInfo) return [`Page ${batchInfo.index} of ${batchInfo.total}`, 'Rendering this batch page…']
       return editingId && activeIdx >= 0
         ? ['Review & export', `Page ${activeIdx + 1} of ${pages.length} — tune the look, then update`]
         : ['Review & export', 'Pick a look and fine-tune, then add the page to your document']
+    }
     return ['Add a document', 'Drop a photo anywhere, or use the photo / camera buttons to start']
-  }, [stage, editingId, activeIdx, pages.length])
+  }, [stage, editingId, activeIdx, pages.length, batchInfo])
 
   /* ================================================================ render */
 
@@ -1260,6 +1356,14 @@ export default function App() {
         />
       )}
 
+      {showBatchDialog && batchPending && (
+        <BatchDialog
+          count={batchPending.length}
+          onCancel={() => { setShowBatchDialog(false); setBatchPending(null) }}
+          onStart={startBatch}
+        />
+      )}
+
       <div className="toasts">
         {toasts.map((t) => (
           <div key={t.id} className={`toast ${t.kind}`}>
@@ -1295,6 +1399,64 @@ function ConnectHelp({ onOpenSettings, onClose }) {
         <div className="modal-actions">
           <button className="btn ghost" onClick={onClose}>Close</button>
           <button className="btn primary" onClick={onOpenSettings}>Open server settings</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ---- importing several photos at once: one style, applied to the whole batch ---- */
+function BatchDialog({ count, onCancel, onStart }) {
+  const [border, setBorder] = useState(true)
+  const [mode, setMode] = useState('docs')
+  const [bw, setBw] = useState(false)
+  return (
+    <div className="modal-scrim" onClick={onCancel}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <b>Import {count} pages</b>
+          <button className="iconbtn sm" onClick={onCancel}><Icon name="x" size={14} /></button>
+        </div>
+        <p className="modal-note">
+          Pick one look for all {count} photos — you can still fine-tune any page afterwards.
+        </p>
+
+        <span className="seclabel">Scan style</span>
+        <div className="segmented vertical">
+          {STYLES.map((s) => (
+            <button
+              key={s.id}
+              className={`seg-btn${mode === s.id ? ' active' : ''}`}
+              title={s.desc}
+              onClick={() => setMode(s.id)}
+            >
+              <span className={`seg-swatch ${s.sw}`} />
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        <span className="seclabel">Colour</span>
+        <div className="pilltoggle">
+          <button className={`pill-opt${!bw ? ' active' : ''}`} onClick={() => setBw(false)}>Colour</button>
+          <button className={`pill-opt${bw ? ' active' : ''}`} onClick={() => setBw(true)}>B&amp;W</button>
+        </div>
+
+        <label className="compare-chk" style={{ marginTop: 6 }}>
+          <input type="checkbox" checked={border} onChange={(e) => setBorder(e.target.checked)} />
+          Border adjustment — review and nudge each page's crop
+        </label>
+        {!border && (
+          <p className="modal-note" style={{ marginTop: -4 }}>
+            Off: pages import straight from the detected edges, no crop screen per page.
+          </p>
+        )}
+
+        <div className="modal-actions">
+          <button className="btn ghost" onClick={onCancel}>Cancel</button>
+          <button className="btn primary" onClick={() => onStart({ border, mode, bw })}>
+            Import {count} pages
+          </button>
         </div>
       </div>
     </div>
