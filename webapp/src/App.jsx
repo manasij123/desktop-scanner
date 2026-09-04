@@ -46,8 +46,8 @@ function fit(w, h, cap) {
 // 12–108 MP; decoding that full-res OOMs a low-RAM device, so cap harder there.
 function srcCap() {
   const mem = navigator.deviceMemory || 0 // GB, Chromium only (undefined elsewhere)
-  if (mem && mem <= 3) return 2200
-  try { if (matchMedia('(pointer: coarse)').matches) return 3000 } catch { /* no matchMedia */ }
+  if (mem && mem <= 3) return 2000
+  try { if (matchMedia('(pointer: coarse)').matches) return 2600 } catch { /* no matchMedia */ }
   return 3600
 }
 
@@ -129,7 +129,7 @@ async function loadSource(file) {
   return { el: c, w, h, file: upload }
 }
 
-function srcToFile(canvas, q = 0.88) {
+function srcToFile(canvas, q = 0.9) {
   return new Promise((res) =>
     canvas.toBlob((b) => res(new File([b], 'scan.jpg', { type: 'image/jpeg' })), 'image/jpeg', q))
 }
@@ -307,9 +307,20 @@ export default function App() {
   }, [toast])
   useEffect(() => () => engineRef.current?.dispose(), [])
 
+  // A committed page keeps its compact JPEG (src.file); the heavy decoded
+  // canvas (src.el) is dropped whenever nobody's editing and rebuilt on demand.
+  // Otherwise every page pins a ~25 MB canvas and a few of them OOM a phone
+  // (white screen) the moment the crop editor starts its redraw loop.
+  const dropIdleSources = useCallback(() => {
+    if (!onPhone()) return  // desktop has the headroom — keep page switching instant
+    setPages((ps) => ps.map((x) => (x.src?.el ? { ...x, src: { ...x.src, el: null } } : x)))
+  }, [])
+  const showGallery = useCallback(() => { dropIdleSources(); setGalleryOpen(true) }, [dropIdleSources])
+
   /* ---- import ---- */
   const beginSource = useCallback(async (file) => {
     setGalleryOpen(false)
+    dropIdleSources()  // free other pages' canvases before decoding a new one
     setBusy('Reading image…')
     try {
       const src = await loadSource(file)
@@ -348,7 +359,7 @@ export default function App() {
     } finally {
       setBusy(null)
     }
-  }, [toast, say, useServer, apiUrl])
+  }, [toast, say, useServer, apiUrl, dropIdleSources])
 
   const startFiles = useCallback((fileList) => {
     const files = [...fileList].filter((f) => f.type.startsWith('image/'))
@@ -445,7 +456,14 @@ export default function App() {
     }
   }, [work, corners, cropGeom])
 
-  useEffect(() => { if (stage === 'crop') drawCrop() }, [stage, drawCrop])
+  // coalesce the redraw to one per frame — a fast finger drag fires far more
+  // pointermove events than the screen refreshes, and each redraw scales the
+  // whole source image
+  useEffect(() => {
+    if (stage !== 'crop') return
+    const id = requestAnimationFrame(drawCrop)
+    return () => cancelAnimationFrame(id)
+  }, [stage, drawCrop])
 
   const ptr = (e) => {
     const cv = cropRef.current
@@ -573,7 +591,7 @@ export default function App() {
     rot.fallback = work.fallback
     rot.flat = work.flat
     rot.conf = work.conf
-    rot.file = useServer ? await srcToFile(rot.el) : work.file
+    rot.file = await srcToFile(rot.el)  // keep .file in step with .el so a page can rehydrate from it
     setWork(rot)
     setCorners((c) => rotateQuad(c, dir))
     setBaseCorners((c) => rotateQuad(c, dir))
@@ -669,7 +687,7 @@ export default function App() {
       setEditingId(id)
       say(`Added as page ${pages.length + 1}`)
       toast(`Added page ${pages.length + 1}`, 'good')
-      if (!nextQueued() && onPhone()) setGalleryOpen(true)
+      if (!nextQueued() && onPhone()) showGallery()
     } catch (e) {
       toast(e.message || 'Could not render the page', 'error')
     } finally { setBusy(null) }
@@ -687,7 +705,7 @@ export default function App() {
       say('Page updated')
       toast('Page updated', 'good')
       // advance a multi-import if one's in progress, else fall back to the grid
-      if (!nextQueued() && onPhone()) setGalleryOpen(true)
+      if (!nextQueued() && onPhone()) showGallery()
     } catch (e) {
       toast(e.message || 'Could not update the page', 'error')
     } finally { setBusy(null) }
@@ -722,20 +740,33 @@ export default function App() {
   }
 
   /* ---- page list ---- */
-  const openPage = (pg) => {
+  const openPage = async (pg) => {
+    let src = pg.src
+    if (!src?.el) {
+      setBusy('Loading page…')
+      try {
+        const re = await loadSource(src.file)
+        src = { ...src, el: re.el, w: re.w, h: re.h, file: re.file }
+        setPages((ps) => ps.map((x) => (x.id === pg.id ? { ...x, src } : x)))
+      } catch {
+        toast('Could not reopen that page', 'error'); setBusy(null); return
+      }
+      setBusy(null)
+    }
     if (!useServer) {
       const eng = engine()
       if (!eng) return
-      eng.setSource(pg.src.el, pg.src.w, pg.src.h)
+      eng.setSource(src.el, src.w, src.h)
     }
-    setWork(pg.src)
+    setWork(src)
     setCorners(pg.corners)
     setBaseCorners(pg.corners)
     setOpts(pg.opts)
     setEditingId(pg.id)
-    setDocConf(pg.src.conf ?? null)
+    setDocConf(src.conf ?? null)
     setHintOff(true)  // already committed — don't nag when re-styling
     setShowAdjust(false)
+    setShowOcr(false)
     setOcrText('')
     setSrvPreview((u) => { if (u) URL.revokeObjectURL(u); return null })
     setStage('preview')
@@ -863,7 +894,7 @@ export default function App() {
       <div className="shell">
         <header className={`topbar${pages.length > 0 && stage === 'preview' && !galleryOpen ? ' has-back' : ''}`}>
           {pages.length > 0 && stage === 'preview' && !galleryOpen && (
-            <button className="topbar-back" onClick={() => setGalleryOpen(true)} title="Back to pages">
+            <button className="topbar-back" onClick={showGallery} title="Back to pages">
               <Icon name="chevron-left" size={20} />
             </button>
           )}
