@@ -25,7 +25,6 @@ const OCR_LANGS = [
   ['eng+ben', 'English + Bengali'],
 ]
 const ACCEPT = 'image/png,image/jpeg,image/webp,image/bmp'
-const SRC_CAP = 3600
 const PREVIEW_DIM = 1000  // px long side for a server preview render (speed)
 const EXPORT_DIM = 2600   // px long side for the committed / exported page
 const DEFAULT_OPTS = {
@@ -43,16 +42,81 @@ function fit(w, h, cap) {
   return [Math.max(1, Math.round(w * s)), Math.max(1, Math.round(h * s))]
 }
 
+// working-resolution ceiling for the source. A modern phone camera shoots
+// 12–108 MP; decoding that full-res OOMs a low-RAM device, so cap harder there.
+function srcCap() {
+  const mem = navigator.deviceMemory || 0 // GB, Chromium only (undefined elsewhere)
+  if (mem && mem <= 3) return 2200
+  try { if (matchMedia('(pointer: coarse)').matches) return 3000 } catch { /* no matchMedia */ }
+  return 3600
+}
+
+// Pull width/height straight from the file header — no decode, so we can ask
+// createImageBitmap to decode *directly* to a downscaled bitmap and never
+// hold the full-res image in memory.
+async function imageSize(file) {
+  try {
+    const b = new Uint8Array(await file.slice(0, 1 << 20).arrayBuffer())
+    const dv = new DataView(b.buffer)
+    if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) // PNG
+      return { w: dv.getUint32(16), h: dv.getUint32(20) }
+    if (b[0] === 0x52 && b[1] === 0x49 && b[8] === 0x57 && b[9] === 0x45) { // WEBP (RIFF/WEBP)
+      const f = String.fromCharCode(b[12], b[13], b[14], b[15])
+      if (f === 'VP8 ') return { w: dv.getUint16(26, true) & 0x3fff, h: dv.getUint16(28, true) & 0x3fff }
+      if (f === 'VP8L') { const n = dv.getUint32(21, true); return { w: (n & 0x3fff) + 1, h: ((n >> 14) & 0x3fff) + 1 } }
+      if (f === 'VP8X') return {
+        w: ((b[24] | (b[25] << 8) | (b[26] << 16)) & 0xffffff) + 1,
+        h: ((b[27] | (b[28] << 8) | (b[29] << 16)) & 0xffffff) + 1,
+      }
+    }
+    if (b[0] === 0xff && b[1] === 0xd8) { // JPEG — walk the marker segments to SOFn
+      let i = 2
+      while (i + 9 < b.length) {
+        if (b[i] !== 0xff) { i++; continue }
+        let m = b[i + 1]
+        while (m === 0xff) { i++; m = b[i + 1] }
+        if (m === 0xd8 || m === 0xd9 || (m >= 0xd0 && m <= 0xd7)) { i += 2; continue }
+        if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc)
+          return { h: (b[i + 5] << 8) | b[i + 6], w: (b[i + 7] << 8) | b[i + 8] }
+        const len = (b[i + 2] << 8) | b[i + 3]
+        if (len < 2) break
+        i += 2 + len
+      }
+    }
+  } catch { /* unknown format — fall back to a plain decode */ }
+  return null
+}
+
 async function loadSource(file) {
-  // 'from-image' so a phone photo with an EXIF orientation tag is drawn
-  // upright — the canvas (and the re-encoded, tag-less upload JPEG) must not
-  // depend on the browser's default, which varies.
-  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => createImageBitmap(file))
-  // Always hand the engine a <canvas>, never a raw ImageBitmap: the two
-  // upload with opposite Y orientation under UNPACK_FLIP_Y, and rotate90()
-  // also yields a canvas — one consistent source type keeps the pipeline's
-  // flip handling correct end to end.
-  const [w, h] = fit(bmp.width, bmp.height, SRC_CAP)
+  const cap = srcCap()
+  const dim = await imageSize(file)
+  let down = null
+  if (dim && dim.w > 0 && dim.h > 0 && Math.max(dim.w, dim.h) > cap) {
+    const s = cap / Math.max(dim.w, dim.h)
+    down = { resizeWidth: Math.max(1, Math.round(dim.w * s)), resizeHeight: Math.max(1, Math.round(dim.h * s)), resizeQuality: 'medium' }
+  }
+
+  // 'from-image' so an EXIF-rotated phone photo comes out upright. Try the
+  // decode-downscale first; degrade the options one step at a time, and only
+  // fall back to a full-res decode if every downscaled attempt is rejected.
+  let bmp = null
+  const attempts = [
+    { imageOrientation: 'from-image', ...(down || {}) },
+    down && { imageOrientation: 'from-image', resizeWidth: down.resizeWidth, resizeHeight: down.resizeHeight },
+    down && { ...down },
+    down && { resizeWidth: down.resizeWidth, resizeHeight: down.resizeHeight },
+    { imageOrientation: 'from-image' },
+    {},
+  ].filter(Boolean)
+  for (const o of attempts) {
+    try { bmp = await createImageBitmap(file, o); break } catch { /* next */ }
+  }
+  if (!bmp) throw new Error('Could not open that photo — it may be too large for this device')
+
+  // Always hand the engine a <canvas>, never a raw ImageBitmap: the two upload
+  // with opposite Y orientation under UNPACK_FLIP_Y, and rotate90() also yields
+  // a canvas — one source type keeps the pipeline's flip handling correct.
+  const [w, h] = fit(bmp.width, bmp.height, cap)
   const c = document.createElement('canvas')
   c.width = w
   c.height = h
