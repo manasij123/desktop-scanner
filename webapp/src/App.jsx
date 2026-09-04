@@ -180,6 +180,9 @@ function loadTesseract() {
 let _n = 0
 const uid = () => `${Date.now().toString(36)}-${(_n++).toString(36)}`
 
+// the phone layout swaps the side-by-side editor for a gallery ⇄ page-editor flow
+const onPhone = () => { try { return matchMedia('(max-width: 620px)').matches } catch { return false } }
+
 /* ================================================================== APP */
 
 export default function App() {
@@ -193,6 +196,7 @@ export default function App() {
   const [compare, setCompare] = useState(false)
   const [showAdjust, setShowAdjust] = useState(false)
   const [showOcr, setShowOcr] = useState(false)
+  const [galleryOpen, setGalleryOpen] = useState(false)  // mobile: the multi-page grid
   const [docConf, setDocConf] = useState(null)   // 0..1 "looks like a document"
   const [hintOff, setHintOff] = useState(false)  // "not a document" banner dismissed
 
@@ -305,6 +309,7 @@ export default function App() {
 
   /* ---- import ---- */
   const beginSource = useCallback(async (file) => {
+    setGalleryOpen(false)
     setBusy('Reading image…')
     try {
       const src = await loadSource(file)
@@ -593,14 +598,14 @@ export default function App() {
   /* ---- on-device preview render (WebGL) ---- */
   const renderPreview = useCallback(() => {
     const eng = engineRef.current
-    if (useServer || !eng || stage !== 'preview' || !corners) return
+    if (useServer || !eng || stage !== 'preview' || !corners || galleryOpen) return
     eng.render(
       corners,
       compare
         ? { mode: 'original', bw: false, recover: false, sharpen: false, brightness: 0, contrast: 0, saturation: 0 }
         : opts,
     )
-  }, [useServer, stage, corners, opts, compare])
+  }, [useServer, stage, corners, opts, compare, galleryOpen])
 
   const schedule = useCallback(() => {
     cancelAnimationFrame(rafRef.current)
@@ -616,7 +621,7 @@ export default function App() {
 
   /* ---- server preview render (debounced HTTP round-trip) ---- */
   useEffect(() => {
-    if (!useServer || stage !== 'preview' || !work?.file || !corners) return
+    if (!useServer || stage !== 'preview' || !work?.file || !corners || galleryOpen) return
     const o = compare ? { ...DEFAULT_OPTS, mode: 'original' } : opts
     const t = setTimeout(async () => {
       setSrvBusy(true)
@@ -632,7 +637,7 @@ export default function App() {
       }
     }, 320)
     return () => clearTimeout(t)
-  }, [useServer, stage, work, corners, opts, compare, apiUrl, toast])
+  }, [useServer, stage, work, corners, opts, compare, apiUrl, toast, galleryOpen])
 
   /* ---- commit / export ---- */
   const renderFinal = async (src, quad, o) => {
@@ -664,7 +669,7 @@ export default function App() {
       setEditingId(id)
       say(`Added as page ${pages.length + 1}`)
       toast(`Added page ${pages.length + 1}`, 'good')
-      nextQueued()
+      if (!nextQueued() && onPhone()) setGalleryOpen(true)
     } catch (e) {
       toast(e.message || 'Could not render the page', 'error')
     } finally { setBusy(null) }
@@ -681,7 +686,8 @@ export default function App() {
       }))
       say('Page updated')
       toast('Page updated', 'good')
-      nextQueued() // advance if a multi-import is still in progress
+      // advance a multi-import if one's in progress, else fall back to the grid
+      if (!nextQueued() && onPhone()) setGalleryOpen(true)
     } catch (e) {
       toast(e.message || 'Could not update the page', 'error')
     } finally { setBusy(null) }
@@ -743,10 +749,9 @@ export default function App() {
     const next = pages.filter((x) => x.id !== id)
     setPages(next)
     say('Page removed')
-    if (editingId === id) {
-      if (next.length) openPage(next[Math.min(idx, next.length - 1)])
-      else { setEditingId(null); setStage('empty'); setWork(null); setCorners(null) }
-    }
+    if (!next.length) { setGalleryOpen(false); setEditingId(null); setStage('empty'); setWork(null); setCorners(null) }
+    else if (editingId === id && !galleryOpen) openPage(next[Math.min(idx, next.length - 1)])
+    else if (editingId === id) setEditingId(null)
   }
 
   const movePage = (from, to) => setPages((p) => {
@@ -856,7 +861,12 @@ export default function App() {
       </nav>
 
       <div className="shell">
-        <header className="topbar">
+        <header className={`topbar${pages.length > 0 && stage === 'preview' && !galleryOpen ? ' has-back' : ''}`}>
+          {pages.length > 0 && stage === 'preview' && !galleryOpen && (
+            <button className="topbar-back" onClick={() => setGalleryOpen(true)} title="Back to pages">
+              <Icon name="chevron-left" size={20} />
+            </button>
+          )}
           <div className="titles">
             <span className="page-title">{title[0]}</span>
             <span className="page-sub">{title[1]}</span>
@@ -1189,6 +1199,18 @@ export default function App() {
         </div>
       </div>
 
+      {galleryOpen && pages.length > 0 && (
+        <MobileGallery
+          pages={pages}
+          onOpen={(pg) => { setGalleryOpen(false); openPage(pg) }}
+          onRemove={removePage}
+          onMove={movePage}
+          onExport={exportPdf}
+          onAddPhoto={pickFiles}
+          onCamera={captureFromCamera}
+        />
+      )}
+
       {showSettings && (
         <ServerSettings
           apiUrl={apiUrl}
@@ -1373,6 +1395,76 @@ function PageList({ pages, editingId, onOpen, onRemove, onMove, onAdd }) {
         <Icon name="plus" size={14} /> Add page
       </button>
     </aside>
+  )
+}
+
+/* phone: the whole document as a grid of pages — tap one to edit it */
+function MobileGallery({ pages, onOpen, onRemove, onMove, onExport, onAddPhoto, onCamera }) {
+  const from = useRef(null)
+  const [over, setOver] = useState(null)
+
+  const end = () => {
+    if (from.current != null && over != null && from.current !== over) onMove(from.current, over)
+    from.current = null
+    setOver(null)
+  }
+  const track = (e) => {
+    if (from.current == null) return
+    const card = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-idx]')
+    if (card) setOver(Number(card.dataset.idx))
+  }
+
+  return (
+    <div className="mgallery">
+      <header className="mg-head">
+        <div className="mg-title">
+          <b>Document</b>
+          <span>{pages.length} page{pages.length === 1 ? '' : 's'}</span>
+        </div>
+        <button className="btn primary sm glow" onClick={onExport}>
+          <Icon name="download" size={14} /> PDF
+        </button>
+      </header>
+
+      <div className="mg-grid">
+        {pages.map((p, i) => (
+          <div
+            key={p.id}
+            data-idx={i}
+            className={`mg-card${from.current === i ? ' dragging' : ''}${over === i && from.current != null && from.current !== i ? ' drop' : ''}`}
+          >
+            <button className="mg-card-open" onClick={() => from.current == null && onOpen(p)}>
+              <img src={p.url} alt={`Page ${i + 1}`} draggable={false} />
+            </button>
+            <span className="mg-num">{String(i + 1).padStart(2, '0')}</span>
+            <button
+              className="mg-grip"
+              title="Drag to reorder"
+              onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); from.current = i; setOver(i) }}
+              onPointerMove={track}
+              onPointerUp={end}
+              onPointerCancel={end}
+            >
+              <Icon name="grid" size={11} />
+            </button>
+            <button className="mg-del" title="Remove page" onClick={() => onRemove(p.id)}>
+              <Icon name="trash" size={13} />
+            </button>
+          </div>
+        ))}
+        <button className="mg-card mg-add" onClick={onAddPhoto}>
+          <Icon name="plus" size={22} />
+          <span>Add page</span>
+        </button>
+      </div>
+
+      <div className="mg-bar">
+        <button onClick={onAddPhoto} title="Add from photos"><Icon name="image" size={20} /></button>
+        <button onClick={onCamera} title="Take a photo"><Icon name="camera" size={20} /></button>
+        <span className="mg-bar-sp" />
+        <button onClick={onExport} title="Export PDF"><Icon name="download" size={20} /></button>
+      </div>
+    </div>
   )
 }
 

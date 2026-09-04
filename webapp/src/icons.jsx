@@ -15,6 +15,8 @@ const PATHS = {
   download: 'M12 4v11M7 11l5 5 5-5M5 20h14',
   crop: 'M7 3v14h14M3 7h14v14',
   camera: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z',
+  'chevron-left': 'M15 18l-6-6 6-6',
+  grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   info: 'M12 11v5M12 8h.01',
   image: 'M4 17l5-5 4 4 3-3 4 4',
   layers: 'M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5M3 17l9 5 9-5',

@@ -170,6 +170,8 @@ svg { display: block; }
 .topbar-spacer { flex: 1 1 auto; }
 /* preview-mode Save / Add cluster — only surfaces in the phone header */
 .topbar-actions { display: none; }
+/* "back to the page grid" — phone only */
+.topbar-back { display: none; }
 
 .ring-wrap { display: flex; align-items: center; gap: 8px; }
 .ring { width: 42px; height: 42px; position: relative; flex: none; }
@@ -509,6 +511,66 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
   color: var(--muted); font-size: 12.5px; font-weight: 600;
 }
 
+/* ---------------------------------------------------------------- phone page grid */
+/* the whole document as a thumbnail grid; a phone-only screen sitting over
+   everything, so desktop keeps its side-by-side PAGES list + editor */
+.mgallery {
+  position: fixed; inset: 0; z-index: 45; display: none;
+  flex-direction: column; background: var(--bg); animation: fade .16s var(--ease);
+}
+.mg-head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+  padding: calc(12px + env(safe-area-inset-top) * .4) 16px 11px;
+  border-bottom: 1px solid var(--edge); background: var(--surface-2);
+}
+.mg-title { display: flex; flex-direction: column; line-height: 1.25; }
+.mg-title b { font-size: 16px; font-weight: 800; color: var(--ink); }
+.mg-title span { font-size: 11px; color: var(--muted); font-weight: 600; }
+.mg-head .btn { margin-left: auto; }
+
+.mg-grid {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  align-content: start; padding: 14px calc(14px + env(safe-area-inset-right)) 18px;
+}
+.mg-card {
+  position: relative; aspect-ratio: 3 / 4; border-radius: var(--radius); overflow: hidden;
+  border: 1px solid var(--edge-q); background: var(--surface); box-shadow: var(--shadow-sm);
+  transition: transform .12s var(--ease), box-shadow .12s, outline-color .12s;
+}
+.mg-card.dragging { opacity: .5; }
+.mg-card.drop { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mg-card-open { position: absolute; inset: 0; width: 100%; height: 100%; }
+.mg-card-open img { width: 100%; height: 100%; object-fit: cover; object-position: top center; background: #fff; }
+.mg-num {
+  position: absolute; top: 6px; left: 6px; pointer-events: none;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  padding: 2px 6px; border-radius: 6px; background: rgba(34, 31, 53, .72); color: #fff;
+}
+.mg-grip, .mg-del {
+  position: absolute; width: 26px; height: 26px; border-radius: 8px;
+  display: grid; place-items: center; color: #fff; background: rgba(34, 31, 53, .55);
+  backdrop-filter: blur(2px);
+}
+.mg-grip { bottom: 6px; right: 6px; touch-action: none; cursor: grab; }
+.mg-del { top: 5px; right: 5px; }
+.mg-del:active { background: var(--danger); }
+.mg-add {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  color: var(--accent-ink); font-size: 12px; font-weight: 700;
+  border: 1.5px dashed var(--edge-strong); background: var(--accent-wash);
+}
+.mg-bar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 4px;
+  padding: 8px 14px calc(8px + env(safe-area-inset-bottom) * .7);
+  background: linear-gradient(200deg, #7779FF 0%, #5A5ADF 52%, #3E7BD6 100%);
+}
+.mg-bar button {
+  width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; color: #fff;
+}
+.mg-bar button:active { background: rgba(255, 255, 255, .18); }
+.mg-bar-sp { flex: 1 1 auto; }
+
 /* ---------------------------------------------------------------- toasts */
 .toasts { position: fixed; bottom: 42px; left: 50%; transform: translateX(-50%); z-index: 999;
   display: flex; flex-direction: column; gap: 8px; align-items: center; }
@@ -555,6 +617,8 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
 @media (max-width: 620px) {
   #app { flex-direction: column-reverse; }
 
+  .mgallery { display: flex; }
+
   .rail {
     flex: 0 0 auto; flex-direction: row; width: 100%; height: 56px;
     padding: 0 14px calc(env(safe-area-inset-bottom) * .6); gap: 12px;
@@ -569,6 +633,13 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
   .page-sub { display: none; }
   .topbar-spacer { display: none; }
   .titles { flex: 1 1 100%; order: 1; padding-right: 44px; }
+  .topbar.has-back .titles { padding-left: 34px; }
+  /* leading "back to the grid" chevron, mirrors the logo top-right */
+  .topbar-back {
+    display: grid; place-items: center; position: absolute; top: 8px; left: 10px; z-index: 1;
+    width: 32px; height: 32px; border-radius: 9px; color: var(--ink-soft);
+  }
+  .topbar-back:active { background: var(--glass-sunk); }
   /* the mark, pinned to the top-right corner of the header */
   .topbar-logo { display: grid; position: absolute; top: 9px; right: 14px; }
   .srv-chip { order: 2; padding: 5px 9px; font-size: 10.5px; gap: 5px; }
@@ -586,9 +657,7 @@ input.slider::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; 
   .hairline { margin: 0 14px; }
   .work { padding: 10px 12px calc(10px + env(safe-area-inset-bottom) * .3); gap: 8px; overflow: hidden; }
 
-  .pagelist { max-height: 118px; border-radius: var(--radius); }
-  .pagelist[data-empty] { display: none; }   /* the bottom + button covers this */
-  .thumb img { height: 76px; max-height: 76px; }
+  .pagelist { display: none; }   /* page navigation is the full-screen grid now */
 
   /* ClearScanner-style mobile editor: a big preview, a scan-style ribbon
      above it, a 4-up tool grid below. `display: contents` lifts the control
