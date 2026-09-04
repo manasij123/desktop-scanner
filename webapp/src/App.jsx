@@ -999,7 +999,7 @@ export default function App() {
                       onClick={() => setOpts((o) => ({ ...o, recover: !o.recover }))}
                       title={recoverable ? 'Re-ink strokes a glare washed out (Docs / Clear)' : 'Switch to Docs or Clear first'}
                     >
-                      <Icon name="text" size={16} /> <span>Recover<span className="hide-sm"> faded text</span></span>
+                      <Icon name="text" size={16} /> <span>Recover</span>
                       {opts.recover && recoverable && <Icon name="check" size={15} className="ctl-check" />}
                     </button>
                     <button
